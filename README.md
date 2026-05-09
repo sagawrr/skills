@@ -1,6 +1,9 @@
 ![Skills banner](banner.jpg)
 
 # Skills
+
+[![skills.sh](https://skills.sh/b/sagawrr/skills)](https://skills.sh/sagawrr/skills)
+
 Each skill is a small, focused instruction set that helps an agent do one kind of work better. The goal is simple: less repeated setup, better judgment, and more consistent results across tools and agent environments.
 
 ## Install

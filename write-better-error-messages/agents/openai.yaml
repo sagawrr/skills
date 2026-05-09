@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Better Error Messages"
+  short_description: "Draft and review helpful product error copy"
+  default_prompt: "Use $write-better-error-messages to rewrite these product error messages so users understand what happened and what to do next."

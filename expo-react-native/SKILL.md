@@ -123,7 +123,7 @@ import { FlashList } from '@shopify/flash-list';
 ## 5. Animations — Reanimated 4
 
 See `references/animations.md`. Core rules:
-- Animate **only** `transform` + `opacity` — or now layout props **with `useNativeDriver: true`** via Shared Animation Backend
+- Animate **only** `transform` + `opacity` — layout props can now also be animated via the Shared Animation Backend (RN 0.85+)
 - Scroll position → `useSharedValue`, never `useState`
 - `scheduleOnRN` preferred over `runOnJS` for calling JS from a worklet
 - CSS transitions: `style={{ transition: { opacity: { duration: 300 } }, opacity: isVisible ? 1 : 0 }}`
@@ -174,7 +174,7 @@ import { Image } from 'expo-image';
 | RN 0.85 | `StyleSheet.absoluteFillObject` removed; layout props animatable with native driver |
 | Expo SDK 56 | RN 0.85.2 + React 19.2.3; Expo Router forks React Navigation (codemod required) |
 | Expo SDK 55 | `expo-av` → `expo-audio` + `expo-video` |
-| Expo SDK 54 | React Compiler auto-configured; `react-native-worklets` required peer dep |
+| Expo SDK 54 | React Compiler available; `react-native-worklets` required for Reanimated |
 
 ---
 

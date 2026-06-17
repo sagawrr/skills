@@ -164,12 +164,9 @@ function App() {
 }
 ```
 
-Common issues:
+Common issues not covered above:
 
 | Issue | Fix |
 |---|---|
 | Dark mode not responding | `userInterfaceStyle: "automatic"` must be set in app.json |
-| Text not colored | Apply to `<Text>`, not parent `<View>` |
-| `hover:` has no effect | Use `Pressable`, not `View` |
-| Conditional class not applying | Declare both variants: `text-black dark:text-white` |
 | `useColorScheme` missing `setColorScheme` | Import from `'nativewind'`, not `'react-native'` |

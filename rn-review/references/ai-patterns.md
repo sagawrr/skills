@@ -16,7 +16,7 @@ AI training data predates breaking changes. The model generates the old API with
 | `import { Audio } from 'expo-av'` | `import { Audio } from 'expo-audio'` | Expo SDK 55 |
 | `forwardRef` on new function components | Plain `ref` prop (still works, not needed) | React 19 |
 | `jsxImportSource: 'nativewind'` in Babel | Remove for NativeWind v5 | NativeWind v5 |
-| `runOnJS(fn)()` | `scheduleOnRN(fn)` (preferred), `runOnJS` still works | Reanimated 4 |
+| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — all size props removed in v2 | FlashList v2 |
 
 **Why it happens:** The model saw thousands of examples of the old API. It generates them fluently because they look like correct code. The fix is always to check the installed major version against what the code uses.
 
@@ -269,11 +269,11 @@ function EmailInput({ control }: { control: Control<LoginForm> }) {
 
 ```tsx
 // ❌ AI maintains a separate interface alongside the schema — they drift apart
-const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+const LoginSchema = z.object({ email: z.email(), password: z.string().min(8) });
 interface LoginForm { email: string; password: string; } // duplicate, will drift
 
 // ✅ z.infer is the single source of truth
-const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+const LoginSchema = z.object({ email: z.email(), password: z.string().min(8) });
 type LoginForm = z.infer<typeof LoginSchema>;
 ```
 

@@ -17,7 +17,6 @@ For each category: scan the diff, cite `file:line`, assign severity.
 - `elevation` prop used for shadows — use `boxShadow`
 - `findNodeHandle()` — not available in Fabric
 
-**Check:** Look for `ref=` on `View` components, `shadowColor`, `elevation`, `findNodeHandle`.
 
 ---
 

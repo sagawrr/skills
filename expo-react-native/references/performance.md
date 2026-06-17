@@ -62,15 +62,6 @@ function getCached(key: string, compute: () => ComputedResult): ComputedResult {
 
 (`WeakRef` + `FinalizationRegistry` are available in Hermes.)
 
-**Subscriptions must clean up:**
-
-```tsx
-useEffect(() => {
-  const sub = AppState.addEventListener('change', handler);
-  return () => sub.remove();   // missing this = leak on unmount
-}, []);
-```
-
 ---
 
 ## Bundle — Code-Level Wins

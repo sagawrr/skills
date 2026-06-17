@@ -123,21 +123,6 @@ import { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 ---
 
-## New Architecture — Ref on View
-
-View flattening optimization removes views that only exist for layout. Refs on flattened views become null.
-
-```tsx
-// ❌ ref may always be null on New Architecture
-const cardRef = useRef<View>(null);
-<View ref={cardRef}>
-
-// ✅ prevents view from being optimized out
-<View ref={cardRef} collapsable={false}>
-```
-
----
-
 ## Performance Rules
 
 - `cancelAnimation(sv)` before starting a new animation on the same shared value

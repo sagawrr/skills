@@ -1,71 +1,51 @@
-# Animations — Reanimated 4 + New Architecture
+# Animations — Reanimated 4
 
-> Verified against: software-mansion-labs/skills animations SKILL.md, Reanimated 4 docs
+> Verified: software-mansion-labs/skills animations SKILL.md
 
-## Critical: Breaking Changes from Reanimated 3
+## Breaking Change: `runOnJS` → `scheduleOnRN`
 
-| Reanimated 3 | Reanimated 4 |
-|---|---|
-| `runOnJS(fn)(args)` | `scheduleOnRN(fn, ...args)` from `react-native-worklets` |
-| Manual babel plugin | Auto-configured via New Architecture |
-| JS-thread layout animations | Native-thread layout animations (smoother) |
-
-`runOnJS` does not exist in Reanimated 4. Every occurrence is a crash. Replace all of them.
+`runOnJS` does not exist in Reanimated 4. Every call is a crash. Replace all occurrences.
 
 ```tsx
 import { scheduleOnRN } from 'react-native-worklets';
 
-// ❌ Reanimated 3 — crashes in Reanimated 4
-useAnimatedScrollHandler({
-  onScroll: (e) => { runOnJS(setHeader)(e.contentOffset.y > 100); },
-});
+// ❌ Reanimated 3 pattern — crashes
+onScroll: (e) => { runOnJS(setHeader)(e.contentOffset.y > 100); }
 
 // ✅ Reanimated 4
-useAnimatedScrollHandler({
-  onScroll: (e) => {
-    scrollY.value = e.contentOffset.y;
-    if (e.contentOffset.y > 100) scheduleOnRN(setHeader, true);
-  },
-});
+onScroll: (e) => {
+  scrollY.value = e.contentOffset.y;
+  if (e.contentOffset.y > 100) scheduleOnRN(setHeader, true);
+}
 ```
 
 ---
 
-## Choosing the Right Animation Approach
+## Choosing the Right Approach
 
 | Scenario | Use |
 |---|---|
-| Simple show/hide, color change, move | CSS transitions (Reanimated 4) |
-| Gesture-driven animation | `useSharedValue` + `useAnimatedStyle` |
-| Scroll-driven animation | `useAnimatedScrollHandler` + `useSharedValue` |
-| Enter/exit screen transitions | Layout animations |
-| Shared element transition | `sharedTransitionTag` |
+| Simple show/hide, color, position change | CSS transitions (New Architecture only) |
+| Gesture-driven | `useSharedValue` + `useAnimatedStyle` |
+| Scroll-driven | `useAnimatedScrollHandler` + `useSharedValue` |
+| Enter/exit screen | Layout animations |
+| Shared element | `sharedTransitionTag` |
 | Canvas / particle / shader | React Native Skia / react-native-wgpu |
 
 ---
 
-## CSS Transitions (Reanimated 4 — New Architecture only)
+## CSS Transitions (Reanimated 4, New Architecture only)
 
 ```tsx
-import Animated from 'react-native-reanimated';
-
-// Simple opacity toggle — no useSharedValue needed
-<Animated.View
-  style={{
-    transition: { opacity: { duration: 300, easing: 'ease-out' } },
-    opacity: isVisible ? 1 : 0,
-  }}
-/>
-
-// Multiple properties
+// No useSharedValue needed for simple transitions
 <Animated.View
   style={{
     transition: {
+      opacity: { duration: 300, easing: 'ease-out' },
       transform: { duration: 200 },
-      opacity: { duration: 150 },
     },
+    opacity: isVisible ? 1 : 0,
     transform: [{ scale: pressed ? 0.95 : 1 }],
-    opacity: disabled ? 0.4 : 1,
   }}
 />
 ```
@@ -74,34 +54,24 @@ import Animated from 'react-native-reanimated';
 
 ## Shared Value Animations
 
+Only animate GPU-composited properties — `transform` and `opacity`. Animating `width`, `height`, `top`, `left`, `margin`, `padding` triggers native layout recalculation every frame.
+
 ```tsx
-import { useSharedValue, useAnimatedStyle, withSpring, withTiming, useDerivedValue } from 'react-native-reanimated';
-
-const offset = useSharedValue(0);
-
-// ✅ Only animate GPU-composited properties
 const style = useAnimatedStyle(() => ({
-  transform: [
-    { translateX: withSpring(offset.value) },
-    { scale: withTiming(scale.value, { duration: 200 }) },
-  ],
+  transform: [{ translateX: withSpring(offset.value) }],
   opacity: withTiming(visible.value ? 1 : 0),
 }));
-
-// ❌ Never animate layout properties — triggers layout on every frame
-// width, height, top, left, margin, padding, borderWidth
 ```
 
-### `useDerivedValue` — derive animated values without reactions
+### `useDerivedValue` over `useAnimatedReaction`
+
+`useDerivedValue` = derived animated value (most cases). `useAnimatedReaction` = side effects only (rare).
 
 ```tsx
-// ✅ efficient — no observer pattern overhead
+// ✅ derive with zero observer overhead
 const headerOpacity = useDerivedValue(() =>
   interpolate(scrollY.value, [0, 100], [0, 1], Extrapolation.CLAMP)
 );
-
-// useAnimatedReaction is for side effects only (rare)
-// useDerivedValue is for derived animated values (most cases)
 ```
 
 ---
@@ -112,88 +82,68 @@ const headerOpacity = useDerivedValue(() =>
 const scrollY = useSharedValue(0);
 
 const scrollHandler = useAnimatedScrollHandler({
-  onScroll: (e) => {
-    scrollY.value = e.contentOffset.y;
-  },
-  onBeginDrag: () => {
-    // worklet context — use scheduleOnRN for JS calls
-  },
+  onScroll: (e) => { scrollY.value = e.contentOffset.y; },
 });
 
-// Connect to Animated.ScrollView (not plain ScrollView)
+// Animated.ScrollView required — not plain ScrollView
 <Animated.ScrollView onScroll={scrollHandler} scrollEventThrottle={16}>
 ```
 
 ---
 
-## Gesture Handler v2/v3
+## Gesture Handler
 
 ```tsx
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-// Tap with animated press state — prefer over Pressable for animated UIs
 const tap = Gesture.Tap()
   .onBegin(() => { scale.value = withSpring(0.95); })
   .onFinalize(() => { scale.value = withSpring(1); });
 
-// Pan gesture
 const pan = Gesture.Pan()
   .onUpdate(e => { x.value = e.translationX; })
   .onEnd(() => { x.value = withSpring(0); });
 
 // Compose gestures
-const composed = Gesture.Simultaneous(tap, pan);
-
-<GestureDetector gesture={composed}>
-  <Animated.View style={animatedStyle} />
-</GestureDetector>
+const combined = Gesture.Simultaneous(tap, pan);
+<GestureDetector gesture={combined}><Animated.View style={style} /></GestureDetector>
 ```
 
 ---
 
-## Layout Animations (Enter/Exit)
+## Layout Animations
 
 ```tsx
-import { FadeIn, FadeOut, SlideInRight, LinearTransition } from 'react-native-reanimated';
+import { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
-// Enter/exit animations
 <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
 
-// List item reorder animation — attach to the list item
+// List item reorder
 <Animated.View layout={LinearTransition}>
 
-// Shared element transition
-<Animated.Image sharedTransitionTag={`image-${item.id}`} source={{ uri: item.imageUri }} />
-// In destination screen:
-<Animated.Image sharedTransitionTag={`image-${item.id}`} source={{ uri: item.imageUri }} />
+// Shared element — tag must match in both screens
+<Animated.Image sharedTransitionTag={`photo-${item.id}`} source={{ uri: item.imageUri }} />
 ```
 
 ---
 
-## 120fps Setup
+## 120fps
 
-```tsx
-// app.json — enable high frame rate rendering
-{
-  "expo": {
-    "plugins": [
-      ["react-native-reanimated", { "framerate": 120 }]
-    ]
-  }
-}
+```json
+// app.json
+{ "expo": { "plugins": [["react-native-reanimated", { "framerate": 120 }]] } }
 ```
 
-Only effective on ProMotion displays (iPhone 13 Pro+, iPad Pro). Verify with `useFrameCallback` timing.
+Only effective on ProMotion displays (iPhone 13 Pro+, iPad Pro).
 
 ---
 
-## Performance Rules
+## Performance & Safety Rules
 
-- Animated style objects must be created with `useAnimatedStyle` — plain JS objects re-render on every frame
-- Shared values live on the UI thread — never read `.value` in `useAnimatedStyle` outside the worklet (it's synchronous on UI thread)
-- Use `cancelAnimation(sharedValue)` before starting a new animation on the same value to prevent fighting animations
-- `useFrameCallback` for per-frame logic — not `setInterval`
-- Worklet closures capture values by reference — large objects in closures waste UI thread memory; capture only primitives
+- `cancelAnimation(sv)` before starting a new animation on the same shared value — prevents fighting animations
+- Use `useFrameCallback` for per-frame logic, not `setInterval`
+- Worklet closures: capture only primitive values — large object captures waste UI thread memory
+- `Animated.ScrollView`, not `ScrollView`, when attaching `useAnimatedScrollHandler`
 
 ---
 
@@ -203,14 +153,9 @@ Only effective on ProMotion displays (iPhone 13 Pro+, iPad Pro). Verify with `us
 import { useReducedMotion, ReducedMotionConfig } from 'react-native-reanimated';
 
 // Per-component
-function AnimatedCard() {
-  const reduceMotion = useReducedMotion();
-  const entering = reduceMotion ? undefined : FadeIn;
-  return <Animated.View entering={entering}>{children}</Animated.View>;
-}
+const reduceMotion = useReducedMotion();
+<Animated.View entering={reduceMotion ? undefined : FadeIn}>
 
 // Global — wrap app root
-<ReducedMotionConfig mode="always"> // or "system"
-  <App />
-</ReducedMotionConfig>
+<ReducedMotionConfig mode="system"><App /></ReducedMotionConfig>
 ```

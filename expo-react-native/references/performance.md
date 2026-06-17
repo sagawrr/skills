@@ -1,266 +1,139 @@
 # Performance — Deep Patterns
 
-> Verified: Callstack "Ultimate Guide to React Native Optimization", Shopify FlashList v2 blog, expo/skills
+> Verified: Callstack "Ultimate Guide to React Native Optimization", expo/skills, Shopify
 
-## Optimization Loop (always follow this order)
-
-**Measure → Fix one thing → Re-measure → Validate**
-
-Do not report performance issues based on component tree depth or count alone — use real measurements. Do not suggest `useMemo`/`useCallback` changes without profiler evidence.
+**Measure → Fix one thing → Re-measure → Validate.** Never optimize speculatively.
 
 ---
 
 ## Cold Start / TTI
 
-1. **Android: disable JS bundle compression** — allows Hermes to mmap the bundle directly (biggest TTI win on Android)
+### Android: Disable JS bundle compression (biggest Android TTI win)
 
-```js
-// metro.config.js
-const config = getDefaultConfig(__dirname);
-config.transformer.enableBabelRCLookup = false;
-// In android/app/build.gradle:
-// bundleCommand: "bundle --minify true"
-// Do NOT set compress: true — this disables mmap
+Enables Hermes to `mmap` the bundle directly instead of loading it into memory.
+
+```groovy
+// android/app/build.gradle — do NOT set compress: true
+android { bundleConfig { ... } }
 ```
 
-2. **Inline requires** — already default in Expo projects via Metro. Modules load on first use, not app start. Verify in `metro.config.js`:
+In practice: check your existing config doesn't force compression. The Expo default is already correct; only apply if TTI measurements show slowness.
 
-```js
-config.transformer.getTransformOptions = async () => ({
-  transform: { inlineRequires: true },
-});
+### Fonts at build time — config plugin, not `useFonts`
+
+`useFonts` = runtime load = extra render cycle. Config plugin = compile-time = zero runtime cost.
+
+```json
+// app.json
+{ "expo": { "plugins": [["expo-font", { "fonts": ["./assets/fonts/MyFont.ttf"] }]] } }
 ```
 
-3. **Splash screen** — call `SplashScreen.preventAutoHideAsync()` before any async work; hide only after critical data is ready
+### Splash screen — hide only after critical data is ready
 
 ```tsx
 import * as SplashScreen from 'expo-splash-screen';
+SplashScreen.preventAutoHideAsync(); // call before anything async
 
-SplashScreen.preventAutoHideAsync();
-
-export default function App() {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    Promise.all([loadFonts(), prefetchCriticalData()])
-      .finally(() => { setReady(true); SplashScreen.hideAsync(); });
-  }, []);
-  if (!ready) return null;
-  return <RootNavigator />;
-}
+// In root layout, after fonts + critical data:
+SplashScreen.hideAsync();
 ```
-
-4. **Preload common screens** before navigating — native navigation (`react-native-screens`) is required
-
-5. **Fonts at build time** — use Expo config plugin, not `useFonts` hook. Eliminates a render cycle and a network round-trip.
 
 ---
 
 ## Bundle Size
 
 ```bash
-# Analyze JS bundle
-npx react-native bundle \
-  --entry-file index.js --bundle-output out.js \
-  --platform ios --sourcemap-output out.map \
-  --dev false --minify true
-npx source-map-explorer out.js --no-border-checks
-
-# Expo managed workflow
+# Analyze
 npx expo export --dump-sourcemap
+npx source-map-explorer output.js --no-border-checks
 ```
 
-**Fixes in priority order:**
+**Priority fixes:**
 
-1. **Barrel imports** — critical. Replace `import { X } from 'some-lib'` with `import X from 'some-lib/X'`. Barrel files pull in the entire library even when tree-shaking is enabled.
+1. **Barrel imports** — critical. `import { X } from 'some-lib'` pulls the entire library. Use `import X from 'some-lib/X'`.
 
-2. **Tree shaking** — enabled by default in Expo SDK 52+ (`experimentalImportSupport: true` in Metro). Verify unused exports are removed.
+2. **`process.env.EXPO_OS`** — Metro tree-shakes the dead platform's code at build time. `Platform.OS` is a runtime value — no tree-shaking possible.
 
-3. **`process.env.EXPO_OS`** — Metro tree-shakes the other platform's code at build time. `Platform.OS` is a runtime value — no tree-shaking.
-
-4. **R8 (Android)** — enables native code shrinking. In `android/app/build.gradle`:
+3. **R8 (Android)** — native code shrinking:
 ```groovy
+// android/app/build.gradle
 buildTypes {
-  release {
-    minifyEnabled true
-    proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-  }
+  release { minifyEnabled true }
 }
 ```
 
-5. **Remove Intl polyfills** only after confirming Hermes covers the API you need. Check Hermes changelog before removing.
+4. **Tree shaking** — enabled by default in Expo SDK 52+ via Metro. Verify unused exports are eliminated with the bundle analyzer.
 
 ---
 
-## FlashList v2 Advanced Tuning
+## FlashList v2 Advanced
 
 ```tsx
 <FlashList
   data={items}
-  renderItem={({ item }) => <ItemRow item={item} />}
-  keyExtractor={item => item.id}
-  // v2: estimatedItemSize DEPRECATED — do not add it
-  getItemType={item => item.type}   // heterogeneous list — critical for recycler pool separation
-  drawDistance={250}                // px to pre-render beyond viewport (default 250)
-  onEndReached={fetchNextPage}
-  onEndReachedThreshold={0.5}
-  ListFooterComponent={isFetching ? <Spinner /> : null}
-  // For inverted lists (chat)
+  renderItem={renderItem}
+  keyExtractor={item => item.id}  // never use index — breaks recycler identity
+  getItemType={item => item.type} // per-type recycler pools — required for heterogeneous lists
+  drawDistance={250}              // px to pre-render beyond viewport
+  // Inverted lists (chat)
   inverted
   maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
 />
 ```
 
-**Recycling checklist:**
-- `recyclingKey` on every `expo-image` inside list items — prevents stale image flash
-- Never use `index` as `keyExtractor` — breaks recycling identity
-- No conditional hooks inside `renderItem` components
-- Item component should be a stable reference — hoist outside the parent, or wrap with `React.memo` only if compiler confirms bail-out
+- `recyclingKey` on every `expo-image` inside items — prevents stale image on scroll
+- Item components must be stable references — no inline arrow functions in `renderItem`
 
 ---
 
-## Memory Leaks
+## Hermes Engine — What's Non-Obvious
 
-### Pattern 1: Listener not cleaned up
-
-```tsx
-useEffect(() => {
-  const sub = AppState.addEventListener('change', handler);
-  return () => sub.remove(); // ✅ always return cleanup
-}, []);
-```
-
-### Pattern 2: Timer not cleared
+- `BigInt` is **not supported** — use string IDs for large numeric API IDs
+- `WeakRef` + `FinalizationRegistry` are available — use for cache implementations that don't prevent GC
+- `Intl` formatters are built-in — **hoist creation outside components**, never inside render:
 
 ```tsx
-useEffect(() => {
-  const id = setInterval(tick, 1000);
-  return () => clearInterval(id);
-}, []);
-```
+// ❌ new Intl.NumberFormat on every render
+function Price({ n }) { return <Text>{new Intl.NumberFormat('en-US', {...}).format(n)}</Text>; }
 
-### Pattern 3: AbortController for fetch
-
-```tsx
-// With useQuery — this is handled automatically
-// Manual fetch:
-useEffect(() => {
-  const controller = new AbortController();
-  fetch(url, { signal: controller.signal }).then(setData).catch(() => {});
-  return () => controller.abort();
-}, [url]);
-```
-
-### Pattern 4: WeakRef for caches (Hermes supports it)
-
-```tsx
-// Cache that doesn't prevent garbage collection
-const cache = new Map<string, WeakRef<ExpensiveObject>>();
-const registry = new FinalizationRegistry((key: string) => cache.delete(key));
-
-function getCached(key: string) {
-  const ref = cache.get(key);
-  const obj = ref?.deref();
-  if (obj) return obj;
-  const fresh = createExpensive(key);
-  cache.set(key, new WeakRef(fresh));
-  registry.register(fresh, key);
-  return fresh;
-}
+// ✅ created once at module level
+const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+function Price({ n }) { return <Text>{fmt.format(n)}</Text>; }
 ```
 
 ---
 
-## Hermes Engine Notes
-
-Hermes is the JS engine on all Expo projects (SDK 48+). What this means in practice:
-
-- `async/await` compiles efficiently — prefer over `.then()` chains
-- `WeakRef` + `FinalizationRegistry` are available (use for caches)
-- `BigInt` is **NOT supported** — use string IDs for large numeric IDs from APIs
-- Destructuring and spread are fast — no need to avoid them for perf
-- `Intl.DateTimeFormat`, `Intl.NumberFormat` are built-in — hoist creation outside render
-
-```tsx
-// ❌ create Intl formatter inside render — allocated on every render
-function Price({ amount }: { amount: number }) {
-  const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-  return <Text>{fmt.format(amount)}</Text>;
-}
-
-// ✅ hoist outside component — created once
-const priceFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-function Price({ amount }: { amount: number }) {
-  return <Text>{priceFormatter.format(amount)}</Text>;
-}
-```
-
----
-
-## EAS Build / Update Config
+## EAS Config
 
 ```json
-// eas.json
+// eas.json — minimal hardened config
 {
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "env": { "APP_ENV": "development" }
-    },
-    "preview": {
-      "distribution": "internal",
-      "channel": "preview"
-    },
-    "production": {
-      "autoIncrement": true,
-      "channel": "production"
-    }
+    "development": { "developmentClient": true, "distribution": "internal" },
+    "preview":     { "distribution": "internal", "channel": "preview" },
+    "production":  { "autoIncrement": true, "channel": "production" }
   }
 }
 ```
 
 ```json
-// app.json — runtime version (prevents incompatible OTA updates)
-{
-  "expo": {
-    "runtimeVersion": { "policy": "appVersion" },
-    "updates": { "enabled": true, "fallbackToCacheTimeout": 0 }
-  }
-}
+// app.json — prevent incompatible OTA pushes
+{ "expo": { "runtimeVersion": { "policy": "appVersion" } } }
 ```
 
-- JS-only changes → `eas update --branch production` (no rebuild)
-- Native changes → full `eas build` required
-- `sdkVersion` in `app.json` → delete it, let Expo manage automatically
-- **RSC + EAS Update**: incompatible as of SDK 53. Do not use RSC in production with OTA updates.
+- JS-only changes → `eas update --branch production` (no rebuild needed)
+- Native changes (new native dep, config plugin change) → full `eas build`
+- Delete `sdkVersion` from `app.json` — let Expo manage it
 
 ---
 
 ## React Compiler — SDK 54+
 
 ```json
-// app.json — enable (SDK 54+, no Babel config needed)
-{
-  "expo": {
-    "experiments": { "reactCompiler": true }
-  }
-}
+// app.json — no Babel config needed in SDK 54+
+{ "expo": { "experiments": { "reactCompiler": true } } }
 ```
 
-**What it does:**
-- Automatic build-time memoization of components and hooks
-- Conditional memoization after early returns (impossible with `useMemo`)
-- Runs on app code only — not `node_modules`
-- Disabled during server rendering
+Verify a component is being memoized: in `react-profiler-fiber-tree` output, `useMemoCache` present = compiler memoizing. Absent = compiler bailed out (usually a rules of hooks violation).
 
-**What it does NOT do:**
-- Does not let you blindly remove all `useMemo`/`useCallback` — verify with profiler
-- Does not optimize third-party library code
-- Does not replace architecture decisions (context splitting, state minimization)
-
-**Verify compiler is working:**
-```bash
-# In Metro output or react-profiler-fiber-tree output
-# Look for: useMemoCache — present = compiler is memoizing this component
-# Absent = compiler bailed out — may need to fix rules of hooks violations
-```
+Does NOT: optimize node_modules, run during server rendering, or automatically remove all manual `useMemo`/`useCallback` safely.

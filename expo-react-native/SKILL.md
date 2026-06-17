@@ -1,195 +1,78 @@
 ---
 name: expo-react-native
-description: Battle-tested Expo and React Native patterns verified against official sources (React Native 0.78+, Expo SDK 53–56, Reanimated 4, FlashList v2). Use when building, reviewing, or refactoring any Expo or React Native codebase. Covers code patterns, state, effects, performance, and architecture — not device interaction or profiling (see argent-react-native-* skills for those).
+description: Battle-tested Expo and React Native patterns for New Architecture (RN 0.76+), Expo SDK 53–56, Reanimated 4, FlashList v2, NativeWind v4. Use when building, reviewing, or refactoring any Expo or React Native codebase. Covers code patterns, state, animations, performance, and styling — not device interaction or profiling (see argent-react-native-* skills).
 ---
 
 # Expo / React Native — Hardened Patterns
 
-> Sources: reactnative.dev, expo.dev/changelog, shopify.engineering/flashlist-v2, react.dev, software-mansion-labs/skills, callstackincubator/agent-skills, expo/skills
+> Verified: reactnative.dev, expo.dev/changelog, shopify.engineering, software-mansion-labs/skills, callstackincubator/agent-skills, expo/skills, nativewind.dev
 
 ## Ground Rules
 
-1. **New Architecture is the default.** RN 0.76+ and Expo SDK 53+ ship with it on. Enabling it does not automatically improve performance — you must use concurrent features and synchronous layout effects for gains.
-2. **React 19 is shipping now.** RN 0.78 (Feb 2025) + Expo SDK 53/54. Use `use()`, `useTransition`, `useOptimistic`. Function components no longer need `forwardRef`.
-3. **React Compiler: SDK 54+ auto-configures.** Add `"experiments": { "reactCompiler": true }` to `app.json` — no Babel setup needed. It runs on app code only (not node_modules), is disabled during server rendering, and handles conditional memoization after early returns (impossible with manual hooks). Do NOT add `useMemo`/`useCallback`/`React.memo` speculatively — use the profiler to confirm compiler bail-out first.
-4. **Reanimated 4 is the current target.** `runOnJS` is removed. Use `scheduleOnRN(fn, ...args)` from `react-native-worklets` instead. Install `react-native-worklets` (required peer dep in SDK 54+).
-5. **Measure before optimizing.** Measure → fix one thing → re-measure → validate. Do not suggest `useMemo`/`useCallback` changes without profiler evidence.
+1. **New Architecture is default** — RN 0.76+, Expo SDK 53+. Enabling it does not auto-improve perf; apps need refactoring to use concurrent features and synchronous layout.
+2. **React 19 in SDK 53/54** — `use()`, `useTransition`, `useOptimistic`. No more `forwardRef` in function components. `React.use(Context)` replaces `useContext`.
+3. **React Compiler: SDK 54+** — `"experiments": { "reactCompiler": true }` in `app.json`, no Babel config. App code only (not node_modules). Does NOT auto-remove all `useMemo`/`useCallback` — verify bail-outs with profiler (`useMemoCache` absent = bailed out).
+4. **Reanimated 4: `runOnJS` is removed** — use `scheduleOnRN(fn, ...args)` from `react-native-worklets`. Install `react-native-worklets` (required peer dep, SDK 54+).
+5. **Measure before optimizing** — profile first, fix one thing, re-measure. Never suggest `useMemo`/`useCallback` changes without profiler evidence.
 
 ---
 
-## 1. Kill useEffect — Use the Right Primitive
+## 1. useEffect — Know When Not To Use It
 
-`useEffect` has exactly three legitimate uses: (1) subscribing to an external system with no `useSyncExternalStore` interface, (2) triggering imperative native code after mount with cleanup, (3) synchronizing two external systems. Everything else has a better primitive.
+`useEffect` has 3 legitimate uses: (1) imperative subscriptions with no `useSyncExternalStore` interface, (2) triggering imperative native code after mount with cleanup, (3) synchronizing two external systems. Everything else has a better primitive.
 
-### 1a. Derived state → compute during render
-
-```tsx
-// ❌ effect syncing state — extra render, stale frame
-const [filtered, setFiltered] = useState(items);
-useEffect(() => setFiltered(items.filter(active)), [items, active]);
-
-// ✅ compute inline — zero lag, zero extra render
-const filtered = items.filter(active);
-```
-
-### 1b. Async data → TanStack Query
+| Pattern | Replace with |
+|---|---|
+| Data fetch on mount | `useQuery` (TanStack Query) |
+| Derived state from props/state | Compute during render — no hook |
+| Side effect on event | Put it in the event handler |
+| Layout measurement | `onLayout` callback — no flicker |
+| Promise + Suspense | `use(promise)` — promise must be created outside render |
+| Store subscription | `useSyncExternalStore` |
+| Animated value derivation | `useDerivedValue` worklet |
+| State reset when ID changes | `key={id}` prop to remount |
 
 ```tsx
-// ❌ useEffect fetch — race conditions, no caching, manual loading state
-useEffect(() => { fetch(url).then(r => r.json()).then(setData); }, [url]);
-
-// ✅ TanStack Query — caching, deduplication, background refresh
-const { data, isPending } = useQuery({
-  queryKey: ['user', id],
-  queryFn: () => fetchUser(id),
-  staleTime: 60_000,
-});
-```
-
-### 1c. React 19 `use()` with Suspense
-
-```tsx
-// Promises must be created OUTSIDE render (stable reference required)
-// ✅ correct — promise created in parent, passed as prop
+// ✅ use() — promise must be stable (created outside render, not inline)
 function Profile({ userPromise }: { userPromise: Promise<User> }) {
-  const user = use(userPromise); // suspends until resolved
+  const user = use(userPromise);
   return <Text>{user.name}</Text>;
 }
-
-// Wrap with Suspense + ErrorBoundary
-<ErrorBoundary fallback={<ErrorScreen />}>
-  <Suspense fallback={<Skeleton />}>
-    <Profile userPromise={stablePromise} />
-  </Suspense>
-</ErrorBoundary>
+// Wrap with <Suspense fallback={<Skeleton />}> + <ErrorBoundary>
 ```
 
-### 1d. Context → `React.use` (React 19)
-
 ```tsx
-// ❌ old
-const theme = useContext(ThemeContext);
-
-// ✅ React 19 — same result, works in conditions and loops
-const theme = use(ThemeContext);
-```
-
-### 1e. Event side-effect → put in handler, not effect
-
-```tsx
-// ❌ watches state to fire analytics
-useEffect(() => { if (submitted) sendAnalytics('form_submitted'); }, [submitted]);
-
-// ✅ fire directly in handler — no dependency array bugs
-function handleSubmit() {
-  setSubmitted(true);
-  sendAnalytics('form_submitted');
-}
-```
-
-### 1f. External store → `useSyncExternalStore`
-
-```tsx
-const value = useSyncExternalStore(store.subscribe, store.getSnapshot);
-```
-
-### 1g. Layout measurement → `onLayout`, not `useEffect`
-
-```tsx
-// ❌ useEffect measure causes a visible flicker frame
-useEffect(() => { ref.current?.measure(setSize); }, []);
-
-// ✅ onLayout fires synchronously with layout
+// ✅ onLayout — synchronous, no flicker frame
 <View onLayout={e => setSize(e.nativeEvent.layout)} />
 ```
 
 ---
 
-## 2. State Architecture
+## 2. State
 
-### 2a. Minimize state — derive everything possible
-
-```tsx
-// ❌
-const [items, setItems] = useState([]);
-const [count, setCount] = useState(0);
-const [isEmpty, setIsEmpty] = useState(true);
-
-// ✅
-const [items, setItems] = useState([]);
-const count = items.length;
-const isEmpty = count === 0;
-```
-
-### 2b. Server state → TanStack Query; client global state → Zustand/Jotai
-
-Never put server data in Redux or `useState`. Server state has its own lifecycle.
+- **Server state** → TanStack Query. Never in Redux or `useState`.
+- **Client global state** → Zustand or Jotai. See `references/state-and-effects.md` for patterns.
+- **Context** — only for stable values (auth, theme). Fast-changing values in context re-render all consumers. Route fast-changing values to Zustand or `useSharedValue`.
 
 ```tsx
-// Zustand — atomic client state
-const useStore = create<State>()(
-  immer((set) => ({
-    theme: 'dark',
-    setTheme: (t) => set(s => { s.theme = t }),
-  }))
-);
-const theme = useStore(s => s.theme); // selector — subscribe to a slice only
-```
-
-### 2c. Context = dependency injection, not state manager
-
-```tsx
-// ❌ context with fast-changing values re-renders all consumers
-<SearchContext.Provider value={{ search, setSearch }}>
-
-// ✅ context for stable values only (auth, theme)
-// Fast-changing values → Zustand atom or useSharedValue
-```
-
-### 2d. Updater form for state depending on previous value
-
-```tsx
-setCount(c => c + 1); // always safe in concurrent mode
+// React 19 — use() works in conditionals; useContext does not
+const user = use(AuthContext);
 ```
 
 ---
 
 ## 3. React 19 Patterns
 
-### 3a. `useTransition` — non-urgent updates
-
 ```tsx
+// useTransition — input stays urgent, search is interruptible
 const [isPending, startTransition] = useTransition();
-function handleSearch(text: string) {
-  setInputValue(text); // urgent — updates input immediately
-  startTransition(() => setSearchQuery(text)); // deferred — interruptible
-}
-```
+startTransition(() => setSearchQuery(text));
 
-### 3b. `useDeferredValue` — expensive derived renders
+// useOptimistic — instant UI, real update in background
+const [likes, addOptimistic] = useOptimistic(serverLikes, (cur, inc) => cur + inc);
+async function handleLike() { addOptimistic(1); await likePost(id); }
 
-```tsx
-const deferredQuery = useDeferredValue(query);
-// Heavy list renders stale while typing — no jank on input
-```
-
-### 3c. `useOptimistic` — instant UI feedback
-
-```tsx
-const [optimisticLikes, addOptimistic] = useOptimistic(likes, (cur, inc) => cur + inc);
-async function handleLike() {
-  addOptimistic(1);  // instant
-  await likePost(id); // real
-}
-```
-
-### 3d. `forwardRef` no longer needed in function components (React 19)
-
-```tsx
-// ❌ old
-const Input = forwardRef<TextInput, Props>((props, ref) => <TextInput ref={ref} {...props} />);
-
-// ✅ React 19 — ref is a plain prop
+// forwardRef is gone in React 19 — ref is a plain prop
 function Input({ ref, ...props }: Props & { ref?: Ref<TextInput> }) {
   return <TextInput ref={ref} {...props} />;
 }
@@ -199,89 +82,51 @@ function Input({ ref, ...props }: Props & { ref?: Ref<TextInput> }) {
 
 ## 4. Lists — FlashList v2
 
-FlashList v2 uses New Architecture synchronous layout measurement — no size estimation required.
+FlashList v2 uses New Architecture synchronous layout — no size estimation needed.
 
 ```tsx
-import { FlashList } from '@shopify/flash-list';
-
 <FlashList
   data={items}
   renderItem={({ item }) => <ItemRow item={item} />}
   keyExtractor={item => item.id}
-  // v2: estimatedItemSize is DEPRECATED — do NOT add it
-  getItemType={item => item.type}   // heterogeneous lists — enables recycling optimization
+  // v2: estimatedItemSize is DEPRECATED — do not add it
+  getItemType={item => item.type}     // enables per-type recycler pools
   onEndReached={fetchNextPage}
   onEndReachedThreshold={0.5}
 />
 ```
 
-**FlashList item rules:**
-- Item component must be stable — no inline arrow functions as renderItem props
-- Never create objects/arrays inline in `renderItem`
-- Pass primitives (id, title, imageUri) not full objects when possible
-- Set `recyclingKey` on `expo-image` inside list items — prevents old image flash on scroll
-
-**FlatList**: valid fallback if not yet on New Architecture. ScrollView rendering all items is always wrong for lists > 20 items.
+- Item component must be a stable reference — no inline arrow functions as `renderItem`
+- Never create objects/arrays inline inside `renderItem`
+- Set `recyclingKey` on every `expo-image` inside list items (prevents stale image flash)
+- Never use `index` as `keyExtractor` — breaks recycling identity
+- FlatList: valid fallback if not on New Architecture. ScrollView rendering all items is always wrong for lists > ~20 items.
 
 ---
 
 ## 5. Animations — Reanimated 4
 
-> See `references/animations.md` for full patterns.
+> Full patterns: `references/animations.md`
 
-### 5a. `runOnJS` is removed — use `scheduleOnRN`
+**`runOnJS` is removed. Use `scheduleOnRN` everywhere.**
 
 ```tsx
 import { scheduleOnRN } from 'react-native-worklets';
 
-// ❌ Reanimated 4 — runOnJS does not exist
-const handler = useAnimatedScrollHandler({
-  onScroll: (e) => { runOnJS(onScroll)(e.contentOffset.y); }, // CRASH
-});
+// ❌ Reanimated 3 — crashes in Reanimated 4
+onScroll: (e) => { runOnJS(setHeader)(e.contentOffset.y > 100); }
 
-// ✅
-const handler = useAnimatedScrollHandler({
-  onScroll: (e) => {
-    scrollY.value = e.contentOffset.y;
-    if (e.contentOffset.y > 100) scheduleOnRN(onScrollPast100);
-  },
-});
-```
-
-### 5b. Scroll position → shared value, never state
-
-```tsx
-const scrollY = useSharedValue(0);
-const scrollHandler = useAnimatedScrollHandler(e => {
+// ✅ Reanimated 4
+onScroll: (e) => {
   scrollY.value = e.contentOffset.y;
-});
+  if (e.contentOffset.y > 100) scheduleOnRN(setHeader, true);
+}
 ```
 
-### 5c. Animate only GPU-composited properties
-
-```tsx
-// ✅ transform + opacity — no layout recalculation
-const style = useAnimatedStyle(() => ({
-  transform: [{ translateY: withSpring(offset.value) }],
-  opacity: withTiming(visible.value ? 1 : 0),
-}));
-// ❌ Never animate: width, height, top, left, margin, padding
-```
-
-### 5d. CSS transitions (Reanimated 4 — New Architecture only)
-
-```tsx
-// Reanimated 4 exposes CSS-like transition API
-import Animated from 'react-native-reanimated';
-
-<Animated.View style={{ transition: { opacity: { duration: 300 } }, opacity: visible ? 1 : 0 }} />
-```
-
-### 5e. `useDerivedValue` over `useAnimatedReaction` for derived state
-
-```tsx
-const headerVisible = useDerivedValue(() => scrollY.value > 100);
-```
+- Animate **only** `transform` and `opacity` — animating `width`/`height`/`top`/`left`/`margin` triggers layout recalculation every frame
+- Scroll position → `useSharedValue`, never `useState`
+- `useDerivedValue` for derived animated values; `useAnimatedReaction` only for side effects
+- CSS transitions are first-class in Reanimated 4 (New Architecture only): `style={{ transition: { opacity: { duration: 300 } }, opacity: visible ? 1 : 0 }}`
 
 ---
 
@@ -295,7 +140,7 @@ import { Image } from 'expo-image';
   placeholder={{ blurhash }}
   contentFit="cover"
   transition={200}
-  recyclingKey={item.id}   // REQUIRED inside FlashList items
+  recyclingKey={item.id}   // required inside FlashList — prevents stale image flash
 />
 ```
 
@@ -303,18 +148,18 @@ Never: `Image` from `react-native`, `img` element, FastImage.
 
 ---
 
-## 7. Expo SDK & Router Patterns
+## 7. Expo SDK Breaking Changes
 
-### 7a. SDK versioned breaking changes
-
-| SDK | Change |
-|-----|--------|
+| SDK | Key changes |
+|-----|-------------|
 | 53 | New Architecture default; Expo Router v4; RN 0.79 + React 19 |
-| 54 | React Compiler auto-configured (`"experiments": { "reactCompiler": true }`); `react-native-worklets` required |
-| 55 | NativeTabs changes; `expo-av` → `expo-audio` + `expo-video` |
-| 56 | `@react-navigation/*` imports → `expo-router` entry points |
+| 54 | React Compiler auto-configured; `react-native-worklets` required peer dep |
+| 55 | `expo-av` split → `expo-audio` + `expo-video` |
+| 56 | `@react-navigation/*` imports move to `expo-router` entry points |
 
-### 7b. Library preferences (hard rules)
+---
+
+## 8. Library Preferences
 
 | Use | Never use |
 |-----|-----------|
@@ -323,161 +168,106 @@ Never: `Image` from `react-native`, `img` element, FastImage.
 | `expo-image` | `react-native` Image, `img`, FastImage |
 | `expo-image` `source="sf:name"` | `expo-symbols`, `@expo/vector-icons` |
 | `react-native-safe-area-context` | `SafeAreaView` from `react-native` |
-| `process.env.EXPO_OS` | `Platform.OS` (not tree-shakeable) |
+| `process.env.EXPO_OS` | `Platform.OS` (runtime, not tree-shakeable) |
 | `React.use(Context)` | `useContext(Context)` |
 | `useWindowDimensions()` | `Dimensions.get()` |
 | CSS `boxShadow` prop | Legacy `shadow*` or `elevation` props |
-| Flexbox | `Dimensions` API for layouts |
+| `expo-secure-store` | AsyncStorage for secrets |
 
-### 7c. Expo Router v4 new features (SDK 53+)
+---
+
+## 9. Expo Router v4 (SDK 53+)
 
 ```tsx
-// Guarded route groups — protect authenticated routes
-// app/(protected)/_layout.tsx
-export { guard } from './guard'; // redirects unauthenticated users
+// Guarded route groups — protect authenticated screens
+// app/(protected)/_layout.tsx exports a guard function
 
 // Route prefetching
 <Link href="/detail" prefetch>View Detail</Link>
-// or imperative
-router.prefetch('/detail');
 
-// Build-time redirects (app.json)
-{
-  "expo": {
-    "router": {
-      "redirects": [{ "source": "/old", "destination": "/new" }]
-    }
-  }
-}
+// Build-time redirects — app.json
+{ "expo": { "router": { "redirects": [{ "source": "/old", "destination": "/new" }] } } }
 ```
 
-### 7d. File conventions
-
-```
-app/
-  _layout.tsx          root layout — wrap providers here only
-  (tabs)/
-    _layout.tsx        NativeTabs
-    index.tsx
-  (modal)/
-    sheet.tsx          presentation: 'formSheet'
-```
-
-- Never co-locate components/utils/types in `app/` — only route files
-- `_layout.tsx` must exist in every route group
+File conventions:
+- Route files only in `app/` — never co-locate components, utils, or types
+- `_layout.tsx` in every route group
+- kebab-case filenames: `user-profile.tsx`
 - Always have a route matching `/`
-- kebab-case filenames: `user-profile.tsx` not `UserProfile.tsx`
-
-### 7e. NativeTabs over JS tabs
 
 ```tsx
+// NativeTabs — zero JS re-renders on tab switch
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-// Renders UITabBarController (iOS) / BottomNavigationView (Android)
-// Zero JS re-renders on tab switch
-```
 
-### 7f. Native modals over custom bottom sheets
-
-```tsx
+// Native sheets — prefer over custom bottom sheet libs
 <Stack.Screen options={{
   presentation: 'formSheet',
   sheetAllowedDetents: [0.5, 1.0],
   sheetGrabberVisible: true,
-  contentStyle: { backgroundColor: 'transparent' }, // liquid glass on iOS 26+
+  contentStyle: { backgroundColor: 'transparent' }, // liquid glass iOS 26+
 }} />
 ```
 
-### 7g. RSC — not production-ready
-
-React Server Components in Expo Router are experimental. **EAS Update (OTA) is incompatible with RSC.** Do not ship RSC in production until EAS Update support lands.
-
-### 7h. Try Expo Go first
-
-Before running `npx expo run:ios/android`, verify the feature works in Expo Go (`npx expo start`). Custom builds are only required for: local Expo modules, Apple targets/widgets, third-party native modules not in Expo Go, or custom native config.
+**RSC + EAS Update are incompatible** — do not use React Server Components in production until EAS Update support ships.
 
 ---
 
-## 8. Styling Rules
+## 10. Styling
 
 ```tsx
-// ❌ Legacy shadows — ignored on New Architecture
-shadow={{ color: '#000', radius: 4, opacity: 0.2 }}
-elevation={4}
-
-// ✅ CSS boxShadow — works on New Architecture
+// ✅ New Architecture — CSS boxShadow
 <View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+// ❌ Ignored on New Architecture
+shadow={{ color: '#000', radius: 4, opacity: 0.2 }}
 
-// Inset shadows supported
-<View style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }} />
-
-// ScrollView — always contentContainerStyle for padding (not style)
+// ScrollView padding — always contentContainerStyle (avoids clipping)
 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
 
-// Safe area — contentInsetAdjustmentBehavior, not SafeAreaView wrapper
+// Safe area — no SafeAreaView wrapper needed
 <ScrollView contentInsetAdjustmentBehavior="automatic" />
 
-// Continuous border radius (Apple HIG)
+// Apple HIG continuous corners
 <View style={{ borderRadius: 12, borderCurve: 'continuous' }} />
 
-// Tabular numbers for counters
+// Tabular numbers for counters/prices
 <Text style={{ fontVariant: ['tabular-nums'] }}>{count}</Text>
 
-// Selectable text for data the user might want to copy
+// Selectable text for user-copyable data
 <Text selectable>{address}</Text>
 ```
 
----
-
-## 9. TypeScript Patterns
-
-```tsx
-// Expo env vars — typed
-declare global { namespace NodeJS { interface ProcessEnv { EXPO_OS: 'ios' | 'android' | 'web' } } }
-
-// Path aliases — always over relative imports
-// tsconfig.json: { "paths": { "@/*": ["./src/*"] } }
-import { Button } from '@/components/Button'; // ✅
-import { Button } from '../../../components/Button'; // ❌
-
-// Discriminated unions over optional props — compiler enforces completeness
-type CardProps =
-  | { variant: 'image'; imageUri: string; title: string }
-  | { variant: 'text'; body: string };
-```
+For NativeWind (Tailwind in RN): see `references/nativewind.md`.
 
 ---
 
-## 10. Anti-Pattern Hard Stops
+## 11. Anti-Pattern Hard Stops
 
 | Anti-pattern | Replacement |
 |---|---|
-| `useEffect` for data fetch | TanStack Query / `use()` |
-| `useEffect` to sync state | Derive during render |
-| `useState` for scroll position | `useSharedValue` |
 | `runOnJS` (Reanimated 4) | `scheduleOnRN` from `react-native-worklets` |
 | `estimatedItemSize` on FlashList v2 | Remove — deprecated, auto-handled |
-| `TouchableOpacity` | `Pressable` |
-| `AsyncStorage` for secrets | `expo-secure-store` |
-| `Dimensions.get()` | `useWindowDimensions()` |
-| `Platform.OS` | `process.env.EXPO_OS` |
+| `useState` for scroll position | `useSharedValue` |
+| Animating `width`/`height`/`top`/`left` | Animate `transform` + `opacity` only |
 | `useContext(X)` | `use(X)` (React 19) |
-| Inline style objects in list items | Hoisted `StyleSheet.create` or stable const |
-| `useMemo`/`useCallback` speculatively | Let React Compiler handle it; verify with profiler |
-| `FlatList` for any list | `FlashList` (v2 on New Architecture) |
-| `expo-av` | `expo-audio` + `expo-video` separately |
-| `SafeAreaView` from `react-native` | `react-native-safe-area-context` |
-| Legacy `shadow*`/`elevation` props | CSS `boxShadow` prop |
 | `forwardRef` in function components | Plain `ref` prop (React 19) |
+| `FlatList` for lists | `FlashList` v2 |
+| `expo-av` | `expo-audio` + `expo-video` |
+| `SafeAreaView` from `react-native` | `react-native-safe-area-context` |
+| Legacy `shadow*` / `elevation` | CSS `boxShadow` |
+| `Platform.OS` | `process.env.EXPO_OS` |
+| `Dimensions.get()` | `useWindowDimensions()` |
 | Barrel imports `import { X } from 'lib'` | Direct path `import X from 'lib/X'` |
-| RSC in production with EAS Update | Wait — EAS Update is incompatible |
+| Inline style objects in list items | Hoisted `StyleSheet.create` const |
+| `useMemo`/`useCallback` speculatively | Let React Compiler handle; verify with profiler |
 | `img` / `div` elements | `expo-image` / `View` |
-| Falsy `&&` with number or string | Ternary or `!!` cast |
+| `{count && <Text>}` (falsy number) | `{count > 0 && <Text>}` or ternary |
+| RSC with EAS Update in production | Wait — EAS Update is incompatible |
 
 ---
 
 ## References
 
-- `references/state-and-effects.md` — full useEffect replacement catalog, TanStack Query patterns, Zustand/Jotai
-- `references/animations.md` — Reanimated 4 full guide, CSS transitions, layout animations, 120fps
-- `references/performance.md` — cold start, bundle size, FlashList tuning, memory leaks, EAS config
-- Related skills: `vercel-react-native-skills` (list/animation rules), `building-native-ui` (Expo Router UI), `argent-react-native-optimization` (profiling pipeline)
+- `references/nativewind.md` — NativeWind v4 setup, dark mode, gotchas, third-party components
+- `references/animations.md` — Reanimated 4: CSS transitions, gestures, layout animations, 120fps
+- `references/state-and-effects.md` — TanStack Query patterns, Zustand+SecureStore, Jotai
+- `references/performance.md` — cold start, bundle size, FlashList tuning, EAS config

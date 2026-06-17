@@ -12,9 +12,9 @@
   renderItem={renderItem}
   keyExtractor={item => item.id}     // never index — breaks recycler identity
   getItemType={item => item.type}    // required for heterogeneous lists; enables per-type recycler pools
-  drawDistance={250}                 // px pre-rendered beyond viewport (default 250)
-  inverted                           // for chat lists
-  maintainVisibleContentPosition={{ minIndexForVisible: 0 }}  // keeps scroll position stable in chat
+  drawDistance={250}                 // px pre-rendered beyond viewport
+  // for chat lists: maintainVisibleContentPosition + startRenderingFromBottom replaces inverted
+  maintainVisibleContentPosition={{ minIndexForVisible: 0, startRenderingFromBottom: true }}
 />
 ```
 
@@ -26,7 +26,6 @@
 
 ## Hermes — Non-Obvious Constraints
 
-- **`BigInt` is not supported** — use string IDs for large numeric IDs from APIs
 - **`Intl` formatters must be hoisted** outside components — allocated on every render otherwise
 
 ```tsx
@@ -44,23 +43,19 @@ function Price({ n }) { return <Text>{fmt.format(n)}</Text>; }
 
 ## Memory — Non-Obvious Patterns
 
-**WeakRef for caches** — lets objects be garbage collected when no longer referenced elsewhere:
+**WeakRef for caches** — lets objects be garbage collected when no longer referenced elsewhere. `WeakRef` is available in Hermes (RN 0.70+):
 
 ```tsx
 const cache = new Map<string, WeakRef<ComputedResult>>();
-const registry = new FinalizationRegistry((key: string) => cache.delete(key));
 
 function getCached(key: string, compute: () => ComputedResult): ComputedResult {
   const existing = cache.get(key)?.deref();
   if (existing) return existing;
   const fresh = compute();
   cache.set(key, new WeakRef(fresh));
-  registry.register(fresh, key);
   return fresh;
 }
 ```
-
-(`WeakRef` + `FinalizationRegistry` are available in Hermes.)
 
 ---
 
@@ -75,15 +70,7 @@ function getCached(key: string, compute: () => ComputedResult): ComputedResult {
   import parseDate from 'date-fns/parseDate';
   ```
 
-- **`process.env.EXPO_OS`** — Metro tree-shakes the dead platform's code at build time. `Platform.OS` is a runtime value; no tree-shaking possible.
-
-  ```tsx
-  // ❌ both branches shipped in bundle
-  const isIOS = Platform.OS === 'ios';
-
-  // ✅ dead branch eliminated at build time
-  const isIOS = process.env.EXPO_OS === 'ios';
-  ```
+- **`Platform.OS`** — Metro uses this for platform-specific tree-shaking at build time. `process.env.EXPO_OS` is a runtime value and does NOT trigger platform branch elimination per Expo docs.
 
 ---
 

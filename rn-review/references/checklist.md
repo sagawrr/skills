@@ -15,7 +15,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 **HIGH:**
 - `shadow*` style props (`shadowColor`, `shadowRadius`, `shadowOpacity`, `shadowOffset`) — silently ignored on New Architecture; use `boxShadow`
 - `elevation` prop used for shadows — use `boxShadow`
-- `findNodeHandle()` — not available in Fabric
+- `findNodeHandle()` — deprecated in New Architecture; use direct ref on the component instead of numeric handles
 
 
 ---
@@ -25,8 +25,8 @@ For each category: scan the diff, cite `file:line`, assign severity.
 **HIGH:**
 - `useAnimatedStyle` returns `width`, `height`, `top`, `left`, `margin`, or `padding` — triggers native layout recalculation every frame; animate `transform` + `opacity` only
 - `useAnimatedScrollHandler` attached to a plain `<ScrollView>` — must be `<Animated.ScrollView>`
-- `useAnimatedReaction` used to derive a value — should be `useDerivedValue` (lower overhead)
-- No `cancelAnimation(sv)` before starting a new animation on the same shared value — causes fighting animations
+- `useAnimatedReaction` used to derive a value — should be `useDerivedValue`; `useAnimatedReaction` is for side effects that need access to the previous value, not for computing derived values
+- Starting a new animation while another is mid-flight from a different code path — use `cancelAnimation(sv)` to explicitly stop it first; Reanimated auto-cancels on same-source reassignment, but cross-source conflicts need explicit cancellation
 
 **MEDIUM:**
 - `runOnJS` used in new code — still works but `scheduleOnRN` is the preferred modern form
@@ -37,7 +37,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 ## 3. API Version Correctness
 
 **BLOCKER (confirmed API removals — AI commonly generates these for wrong versions):**
-- `useQuery({ onSuccess, onError, onSettled })` — removed from `useQuery` in TanStack Query v5; use `useMutation.onSuccess` or `useEffect` on `data`
+- `useQuery({ onSuccess, onError, onSettled })` — removed from `useQuery` in TanStack Query v5; replace with `useEffect` watching `data`/`error`, or global `QueryClient` callbacks for app-wide notifications (`useMutation.onSuccess` is for mutations only, not a query replacement)
 - `useQuery({ cacheTime })` — renamed to `gcTime` in TanStack Query v5
 - `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — all removed in v2
 - `MasonryFlashList` import — removed; use `<FlashList masonry numColumns={N} />`
@@ -104,7 +104,7 @@ Every `useEffect` in the diff needs a justification. Fail if:
 
 **HIGH:**
 - Barrel import where a direct path exists: `import { fn } from 'large-lib'` → `import fn from 'large-lib/fn'`
-- `Platform.OS` in a build-time conditional — use `process.env.EXPO_OS` so Metro tree-shakes the dead platform branch
+- `process.env.EXPO_OS` used for platform branching — this does NOT tree-shake; `Platform.OS` is what Metro uses for build-time platform branch elimination
 
 **MEDIUM:**
 - Unused imports in changed files
@@ -115,8 +115,7 @@ Every `useEffect` in the diff needs a justification. Fail if:
 ## 8. Expo Router
 
 **BLOCKER:**
-- Component, hook, or utility file placed directly in `app/` — Expo Router treats every file in `app/` as a route
-- New route group directory without a `_layout.tsx` file
+- Component, hook, or utility file placed directly in `app/` — Expo Router treats it as a route (exceptions: `_`-prefixed files like `_layout.tsx`, and `+`-prefixed special files like `+not-found.tsx`)
 
 **HIGH:**
 - Route file uses PascalCase or camelCase filename — must be kebab-case
@@ -124,6 +123,7 @@ Every `useEffect` in the diff needs a justification. Fail if:
 - Custom header rendered in screen body JSX — use `Stack.Screen options={{ title, headerRight }}` instead
 
 **MEDIUM:**
+- Route group with multiple screens but no `_layout.tsx` — screens work but share no navigator; add layout if Stack/Tab/Drawer is needed
 - Deep relative imports from route files (`../../components`) — use path aliases (`@/components`)
 
 ---

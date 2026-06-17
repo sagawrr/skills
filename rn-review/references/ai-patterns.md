@@ -10,7 +10,7 @@ AI training data predates breaking changes. The model generates the old API with
 
 | Hallucinated pattern | What's actually correct | Library |
 |---|---|---|
-| `useQuery({ onSuccess, onError })` | `useMutation.onSuccess` or `useEffect` on `data` | TanStack Query v5 |
+| `useQuery({ onSuccess, onError })` | `useEffect` watching `data`/`error`, or global `QueryClient` callbacks | TanStack Query v5 |
 | `useQuery({ cacheTime: 5000 })` | `useQuery({ gcTime: 5000 })` | TanStack Query v5 |
 | `estimatedItemSize={72}` on FlashList | Remove — auto-handled in v2 | FlashList v2 |
 | `estimatedListSize` / `estimatedFirstItemOffset` | Remove — all size props removed in v2 | FlashList v2 |
@@ -107,17 +107,15 @@ const cardRef = useRef<View>(null);
 
 **State batching regression:**
 ```tsx
-// ❌ relied on intermediate state between these two setStates
-// Old arch: two separate renders. New arch: one render with final values.
-setLoading(true);         // this intermediate state is lost
-await fetchData();
-setLoading(false);
-setData(result);
+// ❌ two synchronous setStates — Old arch: two renders. New arch: one render (intermediate lost).
+// The await below does NOT cause batching — batching only applies to synchronous state updates.
+setCount(1);
+setFlag(true); // both batched into one render — intermediate count=1/flag=false never renders
 
-// ✅ if the intermediate state matters, batch explicitly or use a reducer
-dispatch({ type: 'FETCH_START' });
+// ✅ if the intermediate render matters, use a reducer (single dispatch = single render)
+dispatch({ type: 'FETCH_START' });            // sets loading=true, data=null in one render
 const result = await fetchData();
-dispatch({ type: 'FETCH_SUCCESS', data: result });
+dispatch({ type: 'FETCH_SUCCESS', data: result }); // sets loading=false, data=result in one render
 ```
 
 ---
@@ -144,7 +142,7 @@ function ProfileScreen() {
 }
 ```
 
-**Rule of thumb:** If a component has > 5 `useState` calls, it's doing too much. If it both fetches data and renders detail, split it.
+**Heuristic (not a hard rule):** Many `useState` calls managing loosely related concerns is a signal to extract a custom hook or use `useReducer`. If it both fetches data and renders detail, split it.
 
 ---
 

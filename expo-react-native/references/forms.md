@@ -117,7 +117,8 @@ useForm({ defaultValues: { name: undefined } });
 // ❌ re-passing values to useForm after mount — has NO effect
 useForm({ defaultValues: newUser });
 
-// ✅ async defaultValues — RHF suspends and waits
+// ✅ async defaultValues — RHF sets formState.isLoading=true, resolves Promise, then resets
+// No React Suspense involved — check formState.isLoading to gate render
 useForm({ defaultValues: async () => fetchUser(id) });
 
 // ✅ update after mount — reset() is the only correct way
@@ -279,11 +280,8 @@ const PasswordSchema = z.object({
   confirmPassword: z.string(),
 }).superRefine((data, ctx) => {
   if (data.password !== data.confirmPassword) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Passwords do not match',
-      path: ['confirmPassword'],
-    });
+    // Zod v4: code defaults to 'custom' — no need to pass it explicitly
+    ctx.addIssue({ message: 'Passwords do not match', path: ['confirmPassword'] });
   }
 });
 ```

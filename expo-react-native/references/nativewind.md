@@ -64,12 +64,15 @@ Always set flex direction explicitly. Use `flex-1` to fill available space.
 import { useColorScheme } from 'nativewind'; // NOT from 'react-native'
 
 function ThemeToggle() {
-  const { colorScheme, toggleColorScheme } = useColorScheme();
-  return <Pressable onPress={toggleColorScheme}><Text>{colorScheme}</Text></Pressable>;
+  const { colorScheme, setColorScheme, toggleColorScheme } = useColorScheme();
+  return (
+    <>
+      <Pressable onPress={toggleColorScheme}><Text>{colorScheme}</Text></Pressable>
+      <Pressable onPress={() => setColorScheme('dark')}><Text>Force dark</Text></Pressable>
+    </>
+  );
+  // setColorScheme accepts 'light' | 'dark' | 'system' — destructure from hook, not a standalone import
 }
-
-// setColorScheme accepts 'light' | 'dark' | 'system'
-setColorScheme('dark');
 ```
 
 ---

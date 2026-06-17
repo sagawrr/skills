@@ -129,10 +129,11 @@ import { FlashList } from '@shopify/flash-list';
 ## 5. Animations — Reanimated 4
 
 See `references/animations.md`. Core rules:
-- Animate **only** `transform` + `opacity` for safe native-driver animations
+- `transform` + `opacity` are always safe; layout props (`width`, `height`, etc.) can also animate natively in RN 0.85+ via Shared Animation Backend
 - Scroll position → `useSharedValue`, never `useState`
 - `scheduleOnRN` preferred over `runOnJS` for calling JS from a worklet
-- CSS transitions: `style={{ transition: { opacity: { duration: 300 } }, opacity: isVisible ? 1 : 0 }}`
+- CSS transitions (single): `style={{ transitionProperty: 'opacity', transitionDuration: '300ms', opacity: isVisible ? 1 : 0 }}`
+- CSS transitions (multi): `transitionProperty: ['opacity', 'transform']`, `transitionDuration: ['300ms', '200ms']` — arrays, not comma strings
 
 ---
 
@@ -150,7 +151,8 @@ See `references/forms.md`. Core rules:
 
 ```tsx
 import { Image } from 'expo-image';
-<Image source={{ uri }} placeholder={{ blurhash }} contentFit="cover" transition={200} recyclingKey={item.id} />
+<Image source={{ uri }} placeholder={{ blurhash }} contentFit="cover" transition={200} recyclingKey={String(item.id)} />
+{/* recyclingKey requires string — coerce numeric IDs with String() */}
 ```
 
 ---
@@ -164,7 +166,7 @@ import { Image } from 'expo-image';
 | `expo-image` | `react-native` Image, FastImage |
 | `expo-image source="sf:name"` | `expo-symbols`, `@expo/vector-icons` |
 | `react-native-safe-area-context` | `SafeAreaView` from `react-native` |
-| `process.env.EXPO_OS` | `Platform.OS` |
+| `Platform.OS` (Metro tree-shakes platform branches) | `process.env.EXPO_OS` (runtime only, no tree-shaking) |
 | `React.use(Context)` | `useContext(Context)` |
 | `useWindowDimensions()` | `Dimensions.get()` |
 | `expo-secure-store` | AsyncStorage for secrets |
@@ -177,7 +179,7 @@ import { Image } from 'expo-image';
 
 | Version | Key code-level changes |
 |---|---|
-| RN 0.85 | `StyleSheet.absoluteFillObject` removed; layout props animatable with native driver |
+| RN 0.85 | `StyleSheet.absoluteFillObject` removed; layout props (`width`, `height`, etc.) now animatable with native driver via Shared Animation Backend |
 | Expo SDK 56 | RN 0.85.2 + React 19.2.3; Expo Router forks React Navigation (codemod required) |
 | Expo SDK 55 | `expo-av` → `expo-audio` + `expo-video` |
 | Expo SDK 54 | React Compiler enabled by default in new projects; `react-native-worklets` required for Reanimated |
@@ -198,9 +200,9 @@ app/
 - kebab-case filenames; `_layout.tsx` in every route group
 
 ```tsx
-<Link href="/detail" prefetch>View</Link>
+<Link href="/detail">View</Link>
 
-import { NativeTabs } from 'expo-router/unstable-native-tabs'; // zero JS re-renders on tab switch
+import { NativeTabs } from 'expo-router/unstable-native-tabs'; // uses native system tab bar
 
 <Stack.Screen options={{ presentation: 'formSheet', sheetAllowedDetents: [0.5, 1.0] }} />
 ```
@@ -210,7 +212,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs'; // zero JS re-ren
 ## 11. Styling
 
 ```tsx
-<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />  // legacy shadow* ignored
+<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />  // New Architecture only (RN 0.76+); don't mix with shadow* on same element
 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
 <ScrollView contentInsetAdjustmentBehavior="automatic" />
 <View style={{ borderRadius: 12, borderCurve: 'continuous' }} />

@@ -29,7 +29,14 @@ const { data, isPending } = useQuery({
   gcTime: 5 * 60_000,   // renamed from cacheTime in v5
 });
 
-// Optimistic mutation with rollback
+// Optimistic mutation — simple approach via mutation.variables (preferred for single-component use)
+const addPost = useMutation({
+  mutationFn: api.posts.create,
+  onSettled: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
+});
+// In JSX: {addPost.isPending && <PostItem post={addPost.variables} opacity={0.5} />}
+
+// Optimistic mutation with full cache rollback (cross-component or server-confirmation scenarios)
 const mutation = useMutation({
   mutationFn: (post: NewPost) => api.posts.create(post),
   onMutate: async (newPost) => {
@@ -40,16 +47,18 @@ const mutation = useMutation({
     ]);
     return { snapshot };
   },
-  onError: (_, __, ctx) => queryClient.setQueryData(['posts'], ctx?.snapshot),
+  // onError: 4 args — (error, variables, onMutateResult, context)
+  onError: (_, __, onMutateResult) => queryClient.setQueryData(['posts'], onMutateResult?.snapshot),
   onSettled: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
 });
 
 // Infinite scroll + FlashList v2
+// initialPageParam is required in v5 (was implicit/defaulted in v4)
 const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
   queryKey: ['feed'],
   queryFn: ({ pageParam }) => api.feed.get({ cursor: pageParam }),
   getNextPageParam: (last) => last.nextCursor ?? undefined,
-  initialPageParam: null as string | null,
+  initialPageParam: null,
 });
 const items = data?.pages.flatMap(p => p.items) ?? [];
 
@@ -223,8 +232,11 @@ useBearStore.setState((s) => ({ count: s.count + 1 }));
 // replace: true in v5 requires complete state (stricter types)
 useBearStore.setState(INITIAL, true); // full replacement — must match entire state shape
 
-// Subscribe (non-React integrations)
-const unsub = useBearStore.subscribe(
+// Subscribe with selector — requires subscribeWithSelector middleware
+// Without it, subscribe only accepts (state, prevState) => void with no selector
+import { subscribeWithSelector } from 'zustand/middleware';
+const useStore = create<BearState>()(subscribeWithSelector((set) => ({ ... })));
+const unsub = useStore.subscribe(
   (state) => state.count,
   (count) => console.log('count:', count)
 );
@@ -235,26 +247,26 @@ const unsub = useBearStore.subscribe(
 ## Context Injection (prop-initialized stores)
 
 ```tsx
-import { createContext, use, useRef } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { createStore, useStore } from 'zustand';
 
 type CountStore = { count: number; increment: () => void };
 type CountApi = ReturnType<typeof createStore<CountStore>>;
 const CountCtx = createContext<CountApi | null>(null);
 
+// useState with initializer — official Zustand pattern (guaranteed single init)
 function CountProvider({ initial = 0, children }: { initial?: number; children: React.ReactNode }) {
-  const ref = useRef<CountApi>();
-  if (!ref.current) {
-    ref.current = createStore<CountStore>()((set) => ({
+  const [store] = useState(() =>
+    createStore<CountStore>()((set) => ({
       count: initial,
       increment: () => set((s) => ({ count: s.count + 1 })),
-    }));
-  }
-  return <CountCtx.Provider value={ref.current}>{children}</CountCtx.Provider>;
+    }))
+  );
+  return <CountCtx.Provider value={store}>{children}</CountCtx.Provider>;
 }
 
 function useCountStore<T>(selector: (s: CountStore) => T) {
-  const store = use(CountCtx); // React 19 use()
+  const store = useContext(CountCtx); // use() also works in React 19+
   if (!store) throw new Error('Missing CountProvider');
   return useStore(store, selector);
 }

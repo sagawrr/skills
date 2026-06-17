@@ -150,3 +150,29 @@ Every `useEffect` in the diff needs a justification. Fail if:
 - Comment explains *what* the code does (restates the code) — remove; only explain *why* when non-obvious
 - Magic number in a style value (`width: 327`) without a named constant or design token
 - Boolean prop names that read as verbs: `doFetch`, `handleOpen` — prefer `isFetching`, `isOpen`
+
+---
+
+## 11. React Hook Form + Zod
+
+**BLOCKER:**
+- `register()` used directly on a React Native `TextInput` — DOM ref-spreading doesn't work in RN; use `useController` or `Controller`
+- `throw` inside a `z.transform()` callback — bypasses ZodError entirely, crashes `safeParse()`
+
+**HIGH:**
+- `mode: 'onChange'` in `useForm` — RHF docs explicitly warn this has "significant impact on performance"; use `mode: 'onBlur'` or `mode: 'onSubmit'`
+- `defaultValues` containing `undefined` fields — conflicts with controlled component state
+- Updating `defaultValues` by re-calling `useForm` with new values — has no effect after mount; use `reset(newValues)`
+- `watch('field')` at the form root — re-renders entire form tree on every change; use `useWatch({ control, name })` in the consuming component
+- Separate TypeScript interface defined alongside a Zod schema — use `type T = z.infer<typeof Schema>` as the only type source
+- `z.union` for shapes that share a discriminator field — use `z.discriminatedUnion('type', [...])` for O(1) lookup vs O(n) sequential
+- `refine()` used for cross-field validation with multiple errors — use `superRefine()` with `ctx.addIssue({ path: ['fieldName'] })`
+- `index` used as React `key` in `useFieldArray` — use `field.id` from the returned fields array
+- Numeric `TextInput` value validated with `z.number()` without coercion — TextInput always returns strings; use `z.coerce.number()`
+
+**MEDIUM:**
+- `formState.errors` or other `formState` sub-property accessed conditionally (short-circuit `&&` / `||`) — Proxy getter doesn't fire; subscription silently broken
+- `[formState.errors]` or `[formState.isValid]` in `useEffect` dependency array — Proxy fires once at declaration, not on re-renders; use `[formState]`
+- `getValues()` used to drive reactive UI — use `useWatch` for reactive reads, `getValues` for callbacks only
+- Generic Zod error messages (`z.string().min(1)` with no message) — provide user-facing messages at schema definition
+- `setError` not used after server errors — field-level server errors should be mapped back with `setError('field', { type: 'server', message })`

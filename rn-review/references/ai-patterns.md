@@ -219,3 +219,77 @@ const fetchUser = (id: string) => api.get(`/users/${id}`).then(r => r.data);
 // collapsable={false} required — New Architecture view flattening makes refs null otherwise
 <View ref={cardRef} collapsable={false}>
 ```
+
+---
+
+## 11. React Hook Form — formState Proxy Misuse
+
+AI tools read `formState` sub-properties conditionally, silently breaking subscriptions.
+
+```tsx
+// ❌ AI-generated — short-circuit prevents isValid getter from firing
+const isDisabled = !formState.isDirty || !formState.isValid;
+
+// ❌ AI-generated — Proxy fires once at declaration, not on changes
+useEffect(() => { validate(errors); }, [formState.errors]);
+
+// ✅ destructure unconditionally at component top
+const { isDirty, isValid, errors } = formState;
+const isDisabled = !isDirty || !isValid;
+useEffect(() => { validate(errors); }, [formState]); // depend on formState, not sub-property
+```
+
+**Why it happens:** AI treats `formState` as a plain object. It's a Proxy — sub-property access is the subscription mechanism.
+
+---
+
+## 12. React Hook Form — `register()` on React Native TextInput
+
+```tsx
+// ❌ AI-generated from web RHF examples — doesn't work in React Native
+<TextInput {...register('email')} />
+
+// ✅ React Native requires useController
+function EmailInput({ control }: { control: Control<LoginForm> }) {
+  const { field, fieldState: { error } } = useController({ control, name: 'email' });
+  return (
+    <>
+      <TextInput value={field.value} onChangeText={field.onChange} onBlur={field.onBlur} />
+      {error && <Text>{error.message}</Text>}
+    </>
+  );
+}
+```
+
+**Why it happens:** AI training data is dominated by web React examples. `register()` works via ref-spreading on web inputs; React Native TextInput works differently.
+
+---
+
+## 13. Zod — Type Duplication
+
+```tsx
+// ❌ AI maintains a separate interface alongside the schema — they drift apart
+const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+interface LoginForm { email: string; password: string; } // duplicate, will drift
+
+// ✅ z.infer is the single source of truth
+const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+type LoginForm = z.infer<typeof LoginSchema>;
+```
+
+---
+
+## 14. Zod — throw inside transform
+
+```tsx
+// ❌ throw inside transform bypasses ZodError — crashes safeParse()
+const Schema = z.string().transform((val) => {
+  if (!val.includes('@')) throw new Error('not an email'); // not caught as ZodError
+  return val.toLowerCase();
+});
+
+// ✅ validate with refine before transform
+const Schema = z.string()
+  .refine((val) => val.includes('@'), 'Enter a valid email')
+  .transform((val) => val.toLowerCase()); // only runs after validation passes
+```

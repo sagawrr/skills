@@ -264,6 +264,7 @@ For NativeWind: `references/nativewind.md`.
 
 ## References
 
+- `references/forms.md` — React Hook Form v7 + Zod v3: useController, formState Proxy, watch vs useWatch vs getValues, defaultValues, useFieldArray, discriminatedUnion, superRefine, coerce
 - `references/animations.md` — Reanimated 4: scheduleOnRN, CSS transitions, gestures, layout animations, 120fps
 - `references/state-and-effects.md` — TanStack Query patterns, Zustand (slices, selectors, persist, context injection), context rules
 - `references/performance.md` — FlashList tuning, Intl hoisting, WeakRef caching, memory patterns

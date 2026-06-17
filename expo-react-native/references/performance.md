@@ -1,129 +1,105 @@
-# Performance — Deep Patterns
+# Performance — Code-Level Patterns
 
-> Verified: Callstack "Ultimate Guide to React Native Optimization", expo/skills, Shopify
-
-**Measure → Fix one thing → Re-measure → Validate.** Never optimize speculatively.
-
-React Compiler config is in SKILL.md Ground Rule 4. Reanimated 4 patterns are in `references/animations.md`. NativeWind performance is in `references/nativewind.md`.
+> Measure → fix one thing → re-measure → validate. Never optimize speculatively.
 
 ---
 
-## Cold Start / TTI
-
-### Android: Disable JS bundle compression (biggest Android TTI win)
-
-Enables Hermes to `mmap` the bundle directly instead of loading it into memory.
-
-```groovy
-// android/app/build.gradle — do NOT set compress: true
-android { bundleConfig { ... } }
-```
-
-In practice: check your existing config doesn't force compression. The Expo default is already correct; only apply if TTI measurements show slowness.
-
-### Fonts at build time — config plugin, not `useFonts`
-
-`useFonts` = runtime load = extra render cycle. Config plugin = compile-time = zero runtime cost.
-
-```json
-// app.json
-{ "expo": { "plugins": [["expo-font", { "fonts": ["./assets/fonts/MyFont.ttf"] }]] } }
-```
-
-### Splash screen — hide only after critical data is ready
-
-```tsx
-import * as SplashScreen from 'expo-splash-screen';
-SplashScreen.preventAutoHideAsync(); // call before anything async
-
-// In root layout, after fonts + critical data:
-SplashScreen.hideAsync();
-```
-
----
-
-## Bundle Size
-
-```bash
-# Analyze
-npx expo export --dump-sourcemap
-npx source-map-explorer output.js --no-border-checks
-```
-
-**Priority fixes:**
-
-1. **Barrel imports** — critical. `import { X } from 'some-lib'` pulls the entire library. Use `import X from 'some-lib/X'`.
-
-2. **`process.env.EXPO_OS`** — Metro tree-shakes the dead platform's code at build time. `Platform.OS` is a runtime value — no tree-shaking possible.
-
-3. **R8 (Android)** — native code shrinking:
-```groovy
-// android/app/build.gradle
-buildTypes {
-  release { minifyEnabled true }
-}
-```
-
-4. **Tree shaking** — enabled by default in Expo SDK 52+ via Metro. Verify unused exports are eliminated with the bundle analyzer.
-
----
-
-## FlashList v2 Advanced
+## FlashList v2 — Advanced
 
 ```tsx
 <FlashList
   data={items}
   renderItem={renderItem}
-  keyExtractor={item => item.id}  // never use index — breaks recycler identity
-  getItemType={item => item.type} // per-type recycler pools — required for heterogeneous lists
-  drawDistance={250}              // px to pre-render beyond viewport
-  // Inverted lists (chat)
-  inverted
-  maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+  keyExtractor={item => item.id}     // never index — breaks recycler identity
+  getItemType={item => item.type}    // required for heterogeneous lists; enables per-type recycler pools
+  drawDistance={250}                 // px pre-rendered beyond viewport (default 250)
+  inverted                           // for chat lists
+  maintainVisibleContentPosition={{ minIndexForVisible: 0 }}  // keeps scroll position stable in chat
 />
 ```
 
-- `recyclingKey` on every `expo-image` inside items — prevents stale image on scroll
-- Item components must be stable references — no inline arrow functions in `renderItem`
+- `recyclingKey` on every `expo-image` inside items — prevents stale image on fast scroll
+- Item components must be stable references — never inline arrow functions in `renderItem`
+- `estimatedItemSize` — deprecated in v2, remove it
 
 ---
 
-## Hermes Engine — What's Non-Obvious
+## Hermes — Non-Obvious Constraints
 
-- `BigInt` is **not supported** — use string IDs for large numeric API IDs
-- `WeakRef` + `FinalizationRegistry` are available — use for cache implementations that don't prevent GC
-- `Intl` formatters are built-in — **hoist creation outside components**, never inside render:
+- **`BigInt` is not supported** — use string IDs for large numeric IDs from APIs
+- **`Intl` formatters must be hoisted** outside components — allocated on every render otherwise
 
 ```tsx
 // ❌ new Intl.NumberFormat on every render
-function Price({ n }) { return <Text>{new Intl.NumberFormat('en-US', {...}).format(n)}</Text>; }
+function Price({ n }) {
+  return <Text>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)}</Text>;
+}
 
-// ✅ created once at module level
+// ✅ created once at module scope
 const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 function Price({ n }) { return <Text>{fmt.format(n)}</Text>; }
 ```
 
 ---
 
-## EAS Config
+## Memory — Non-Obvious Patterns
 
-```json
-// eas.json — minimal hardened config
-{
-  "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
-    "preview":     { "distribution": "internal", "channel": "preview" },
-    "production":  { "autoIncrement": true, "channel": "production" }
-  }
+**WeakRef for caches** — lets objects be garbage collected when no longer referenced elsewhere:
+
+```tsx
+const cache = new Map<string, WeakRef<ComputedResult>>();
+const registry = new FinalizationRegistry((key: string) => cache.delete(key));
+
+function getCached(key: string, compute: () => ComputedResult): ComputedResult {
+  const existing = cache.get(key)?.deref();
+  if (existing) return existing;
+  const fresh = compute();
+  cache.set(key, new WeakRef(fresh));
+  registry.register(fresh, key);
+  return fresh;
 }
 ```
 
-```json
-// app.json — prevent incompatible OTA pushes
-{ "expo": { "runtimeVersion": { "policy": "appVersion" } } }
+(`WeakRef` + `FinalizationRegistry` are available in Hermes.)
+
+**Subscriptions must clean up:**
+
+```tsx
+useEffect(() => {
+  const sub = AppState.addEventListener('change', handler);
+  return () => sub.remove();   // missing this = leak on unmount
+}, []);
 ```
 
-- JS-only changes → `eas update --branch production` (no rebuild needed)
-- Native changes (new native dep, config plugin change) → full `eas build`
-- Delete `sdkVersion` from `app.json` — let Expo manage it
+---
 
+## Bundle — Code-Level Wins
+
+- **Barrel imports** pull the entire library even with tree-shaking. Use direct paths:
+  ```tsx
+  // ❌ pulls everything from the lib
+  import { formatDate, parseDate } from 'date-fns';
+  // ✅
+  import formatDate from 'date-fns/formatDate';
+  import parseDate from 'date-fns/parseDate';
+  ```
+
+- **`process.env.EXPO_OS`** — Metro tree-shakes the dead platform's code at build time. `Platform.OS` is a runtime value; no tree-shaking possible.
+
+  ```tsx
+  // ❌ both branches shipped in bundle
+  const isIOS = Platform.OS === 'ios';
+
+  // ✅ dead branch eliminated at build time
+  const isIOS = process.env.EXPO_OS === 'ios';
+  ```
+
+---
+
+## React Compiler — What to Trust It With
+
+React Compiler (Expo SDK 54+) handles: component memoization, hook memoization, conditional memoization after early returns (impossible with manual `useMemo`). It does NOT handle: third-party library code, server rendering.
+
+Verify it's working: in `react-profiler-fiber-tree` output, `useMemoCache` present = compiler memoizing that component. Absent = bailed out (usually a rules-of-hooks violation — fix the violation, not the memoization).
+
+When manual `useMemo`/`useCallback` is still valid: profiler shows a component re-rendering with identical inputs and the computation is measurably expensive (> 1ms).

@@ -1,124 +1,91 @@
 ---
 name: rn-review
-description: Reviews a React Native or Expo PR diff for correctness, performance, AI-era anti-patterns, and maintainability issues. Outputs inline findings with file:line citations and a severity-ranked summary. Use when asked to review a PR, audit a diff, or check code before merging. Specifically tuned for AI-generated code defects that pass visual inspection but break at runtime.
+description: Reviews a React Native or Expo PR diff for code-level correctness, performance anti-patterns, and AI-era defects. Outputs findings ranked by severity with file:line citations. Use when asked to review a PR, audit a diff, or check code before merging. Specifically tuned for patterns that look correct but break at runtime on New Architecture or under wrong library versions.
 ---
 
 # React Native PR Review
 
-Specialized review for React Native / Expo codebases. Complements the generic `/code-review` skill — run this one first when the project uses React Native.
+Specialized code review for React Native / Expo. Run this before or instead of a generic code review when the project uses React Native.
 
 ## How to Run
 
 ```
-/rn-review           # reviews current git diff (staged + unstaged)
-/rn-review --fix     # applies safe mechanical fixes after review
-/rn-review --comment # posts findings as inline GitHub PR comments
+/rn-review           # reviews current git diff
+/rn-review --fix     # applies safe mechanical fixes (BLOCKER + HIGH)
 ```
 
-1. Get the diff: `git diff main...HEAD` (or `git diff --staged` for pre-commit)
-2. Run each checklist category from `references/checklist.md` as a parallel scan
-3. Cite every finding as `file.tsx:line — [SEVERITY] description`
-4. Output a ranked summary: BLOCKER → HIGH → MEDIUM → INFO
-5. If `--fix` flag: apply mechanical fixes (BLOCKER + HIGH only, no architectural changes)
-6. If `--comment` flag: post findings as inline PR comments via GitHub MCP
+1. Get the diff: `git diff main...HEAD`
+2. Scan each checklist category from `references/checklist.md` against the diff
+3. Cite every finding as `path/file.tsx:line — [SEVERITY] description + fix`
+4. Output ranked summary: BLOCKER → HIGH → MEDIUM → INFO
 
-## Severity Definitions
+## Severity
 
-| Severity | Meaning | Block merge? |
+| Level | Meaning | Example |
 |---|---|---|
-| BLOCKER | Crashes, data loss, security, broken on New Architecture | Yes |
-| HIGH | Perf regression, wrong API version, bad useEffect | Should |
-| MEDIUM | Maintainability, style, suboptimal pattern | No |
-| INFO | Suggestion, better alternative exists | No |
+| BLOCKER | Runtime crash, data loss, broken on New Architecture | `onSuccess` in `useQuery` v5 |
+| HIGH | Silent regression, wrong API, perf degradation | ref without `collapsable={false}` |
+| MEDIUM | Maintainability, suboptimal pattern | speculative `useMemo` |
+| INFO | Better alternative exists | suggest `scheduleOnRN` over `runOnJS` |
 
-## What This Catches That Generic Review Misses
+## Why This Isn't Generic Review
 
-AI tools produce a specific class of defect: **code that looks correct but uses wrong library versions, removed APIs, or patterns that break silently on New Architecture**. This review is tuned for exactly those failure modes.
+AI tools produce a specific class of defect: code that looks correct but uses removed APIs, wrong library versions, or patterns that silently break on New Architecture. Generic review misses these because they require knowing the exact version boundary.
 
-| AI defect | Example |
+| AI-introduced defect | Failure mode |
 |---|---|
-| Hallucinated API | `onSuccess` in `useQuery` — removed in TanStack Query v5 |
-| Wrong Reanimated version | `runOnJS` — removed in Reanimated 4 |
-| New Architecture breakage | Ref on flattened view → always null without `collapsable={false}` |
-| Batching regression | Component relies on intermediate state that batching now eliminates |
-| NativeWind v4/v5 mismatch | `jsxImportSource: 'nativewind'` in Babel config when v5 is installed |
-| Deprecated FlashList prop | `estimatedItemSize` on FlashList v2 |
-| Over-memoization | `useMemo`/`useCallback` added speculatively by AI with no perf evidence |
-| useEffect for derived state | `useEffect(() => setState(compute(x)), [x])` — extra render, stale frame |
-| Expo Router routing error | Component file placed in `app/` instead of `components/` |
-| Wrong image library | `import { Image } from 'react-native'` instead of `expo-image` |
+| `onSuccess` in `useQuery` | Removed in TanStack Query v5 — silently ignored |
+| `estimatedItemSize` on FlashList | Deprecated in v2 — no error, just ignored |
+| Ref without `collapsable={false}` | New Architecture view flattening → ref is always null |
+| `useEffect` for derived state | Extra render cycle, stale frame on state update |
+| `jsxImportSource: 'nativewind'` in Babel | Breaks NativeWind v5 — styles stop applying |
+| Speculative `useMemo`/`useCallback` | Adds noise; React Compiler handles these now |
+| Component file in `app/` directory | Expo Router treats it as a route — 404 or wrong screen |
+| `shadow*` / `elevation` props | Silently ignored on New Architecture |
 
-## Checklist Categories
+## Checklist Categories (run in parallel)
 
-Run these in parallel. Each is detailed in `references/checklist.md`.
+Each category is detailed in `references/checklist.md`:
 
-1. **New Architecture correctness** — batching, refs, Fabric-safe patterns
-2. **Reanimated 4** — `runOnJS`, worklet safety, animation properties
-3. **API version correctness** — TanStack Query v5, FlashList v2, SDK 53–56 changes
-4. **useEffect audit** — every `useEffect` in the diff needs justification
-5. **List rendering** — FlashList setup, recycling, item stability
-6. **Type safety** — `any`, type assertions, missing return types on exported functions
-7. **Bundle impact** — barrel imports, new heavy deps, unused imports
-8. **Expo Router conventions** — file placement, layout files, route structure
-9. **NativeWind** — v4 vs v5 config, mobile gotchas, cascade assumptions
-10. **Maintainability** — file size, component complexity, AI bloat patterns
+1. **New Architecture** — batching, refs, shadow props, Fabric APIs
+2. **Reanimated 4** — animated properties, scroll handler, worklet safety
+3. **API version correctness** — TanStack Query v5, FlashList v2, SDK 55+ changes
+4. **useEffect audit** — every `useEffect` needs a justification
+5. **List rendering** — FlashList setup, recycling keys, item stability
+6. **Type safety** — `any`, type assertions, missing return types
+7. **Bundle** — barrel imports, `Platform.OS` vs `process.env.EXPO_OS`
+8. **Expo Router** — file placement, layout files, navigation API
+9. **NativeWind** — v4/v5 mismatch, cascade assumptions, dark mode
+10. **AI bloat** — over-abstraction, god components, comment noise, speculative memoization
 
-## Output Format
+## Output Template
 
 ```
-## Review: <branch-name> → main
-**N findings: B blockers, H high, M medium, I info**
+## RN Review — <N> findings
 
 ### BLOCKER
-- `src/screens/Feed.tsx:42` — `onSuccess` callback in `useQuery` does not exist in TanStack Query v5.
-  Replace: `useMutation.onSuccess` or a `useEffect` watching `data`.
+- `src/screens/Feed.tsx:42` — `onSuccess` in `useQuery` is removed in TanStack Query v5.
+  Move to `useMutation.onSuccess` or a `useEffect` watching `data`.
 
-### HIGH
-- `src/components/Card.tsx:18` — `ref` on `<View>` without `collapsable={false}`. New Architecture
-  view flattening will make this ref always null.
-  Fix: `<View ref={ref} collapsable={false}>`
+### HIGH  
+- `src/components/Card.tsx:18` — `<View ref={cardRef}>` without `collapsable={false}`.
+  New Architecture view flattening will make this ref always null.
+  Fix: `<View ref={cardRef} collapsable={false}>`
 
-- `src/screens/List.tsx:67` — `useEffect(() => setFiltered(items.filter(fn)), [items])` derives state
-  inside an effect. Compute `filtered` directly during render.
+- `src/screens/Home.tsx:55` — `useEffect(() => setFiltered(items.filter(fn)), [items])`.
+  Derives state inside an effect. Compute `filtered` during render instead.
 
 ### MEDIUM
-- `src/hooks/useData.ts:12` — `useCallback` with empty deps on a function that doesn't close over anything.
+- `src/hooks/useData.ts:12` — `useCallback` with empty deps on a non-closuring function.
   React Compiler handles this — remove the manual wrapper.
 
 ### INFO
-- `src/components/Avatar.tsx:5` — `import { Image } from 'react-native'`. Prefer `expo-image` for
-  caching, blurhash placeholder, and recyclingKey support in lists.
-```
-
-## Automated PR Comments (GitHub Actions)
-
-```yaml
-# .github/workflows/rn-review.yml
-name: RN Review
-on: [pull_request]
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: anthropics/claude-code-action@v1
-        with:
-          prompt: |
-            Run /rn-review --comment on this PR diff.
-            Focus on: New Architecture correctness, Reanimated 4, API version mismatches,
-            useEffect misuse, FlashList v2, type safety.
-          allowed_tools: "Bash,Read,mcp__github_inline_comment__create_inline_comment"
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+- `src/components/Avatar.tsx:5` — `import { Image } from 'react-native'`.
+  Prefer `expo-image` for recyclingKey support inside FlashList.
 ```
 
 ## References
 
-- `references/checklist.md` — full itemized checklist for each category
-- `references/ai-patterns.md` — AI-era anti-patterns with detection patterns and fixes
-- Related skills: `expo-react-native` (patterns reference), `code-review` (generic review)
+- `references/checklist.md` — full itemized checklist per category
+- `references/ai-patterns.md` — AI-era defect patterns with detection and fixes
+- Related: `expo-react-native` skill (authoritative patterns reference)

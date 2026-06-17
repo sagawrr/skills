@@ -60,12 +60,15 @@ async function handleSubmit() {
 // Server state — TanStack Query. Never useState/Redux for server data.
 const { data, isPending } = useQuery({ queryKey: ['user', id], queryFn: () => fetchUser(id) });
 
-// Client global state — Zustand (atomic selectors, no full-store re-renders)
-const theme = useStore(s => s.theme);          // only re-renders when theme changes
-const setTheme = useStore(s => s.setTheme);    // write-only, never triggers re-render
+// Client global state — Zustand with selectors (re-renders only on subscribed slice change)
+const count = useStore((s) => s.count);       // re-renders only when count changes
+const increment = useStore((s) => s.increment); // stable action reference
+
+// useShallow when selector returns object/array
+const { count, name } = useStore(useShallow((s) => ({ count: s.count, name: s.name })));
 
 // Context — stable values only (auth, theme, i18n)
-// Fast-changing values in context re-render ALL consumers — use Zustand or useSharedValue
+// Fast-changing values in context re-render ALL consumers — use Zustand selectors instead
 
 // React 19: use() works in conditionals; useContext does not
 const user = use(AuthContext);
@@ -262,6 +265,6 @@ For NativeWind: `references/nativewind.md`.
 ## References
 
 - `references/animations.md` — Reanimated 4: scheduleOnRN, CSS transitions, gestures, layout animations, 120fps
-- `references/state-and-effects.md` — TanStack Query patterns, Zustand+SecureStore, Jotai, context rules
+- `references/state-and-effects.md` — TanStack Query patterns, Zustand (slices, selectors, persist, context injection), context rules
 - `references/performance.md` — FlashList tuning, Intl hoisting, WeakRef caching, memory patterns
 - `references/nativewind.md` — NativeWind v4/v5 className patterns, dark mode, CSS vars, gotchas

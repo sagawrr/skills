@@ -7,6 +7,24 @@ description: Reviews a React Native or Expo PR diff for code-level correctness, 
 
 Specialized code review for React Native / Expo. Run this before or instead of a generic code review when the project uses React Native.
 
+## Reference Loading
+
+**Before starting the review**, read `package.json` and load only the relevant reference sections:
+
+| If `package.json` contains… | Load these checklist sections |
+|---|---|
+| `react-hook-form` | checklist §11 (RHF + Zod) |
+| `reanimated` | checklist §2 (Reanimated 4) |
+| `nativewind` | checklist §9 (NativeWind) |
+| `@tanstack/react-query` | checklist §3 API version items |
+| `@shopify/flash-list` | checklist §5 (List Rendering) |
+
+Always load: checklist §1 (New Architecture), §4 (useEffect), §6 (Type Safety), §7 (Bundle), §8 (Expo Router), §10 (AI Bloat).
+
+Load `references/ai-patterns.md` only if the diff shows clear AI-generated patterns (god components, speculative memoization, what-comments) or for first-time review of an AI-heavy codebase.
+
+---
+
 ## How to Run
 
 ```
@@ -60,32 +78,33 @@ Each category is detailed in `references/checklist.md`:
 
 ## Output Template
 
+Start with a one-line verdict, then counts, then findings grouped by severity. Example:
+
 ```
-## RN Review — <N> findings
+## RN Review — shipping risk: HIGH · 1 BLOCKER · 2 HIGH · 1 MEDIUM
 
 ### BLOCKER
-- `src/screens/Feed.tsx:42` — `onSuccess` in `useQuery` is removed in TanStack Query v5.
-  Move to `useMutation.onSuccess` or a `useEffect` watching `data`.
+- `src/screens/Feed.tsx:42` — `onSuccess` in `useQuery` removed in TanStack Query v5.
+  Fix: move to `useMutation.onSuccess` or a `useEffect` watching `data`.
 
-### HIGH  
+### HIGH
 - `src/components/Card.tsx:18` — `<View ref={cardRef}>` without `collapsable={false}`.
-  New Architecture view flattening will make this ref always null.
+  New Architecture view flattening makes this ref always null.
   Fix: `<View ref={cardRef} collapsable={false}>`
 
 - `src/screens/Home.tsx:55` — `useEffect(() => setFiltered(items.filter(fn)), [items])`.
-  Derives state inside an effect. Compute `filtered` during render instead.
+  Derives state in an effect. Compute `filtered` during render instead.
 
 ### MEDIUM
-- `src/hooks/useData.ts:12` — `useCallback` with empty deps on a non-closuring function.
-  React Compiler handles this — remove the manual wrapper.
-
-### INFO
-- `src/components/Avatar.tsx:5` — `import { Image } from 'react-native'`.
-  Prefer `expo-image` for recyclingKey support inside FlashList.
+- `src/hooks/useData.ts:12` — `useCallback` with empty deps. React Compiler handles this — remove.
 ```
+
+**Shipping risk** = BLOCKED (any BLOCKER) · HIGH (any HIGH) · MEDIUM (MEDIUMs only) · CLEAN (INFO only or none).
+
+Omit severity levels with zero findings. Skip INFO unless it's the only finding.
 
 ## References
 
 - `references/checklist.md` — full itemized checklist per category
-- `references/ai-patterns.md` — AI-era defect patterns with detection and fixes
+- `references/ai-patterns.md` — AI-era defect patterns with "why it happens" explanations
 - Related: `expo-react-native` skill (authoritative patterns reference)

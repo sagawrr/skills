@@ -69,7 +69,6 @@ const items = data?.pages.flatMap(p => p.items) ?? [];
 |---|---|
 | Default import: `import create from 'zustand'` | Named: `import { create } from 'zustand'` |
 | `create(fn, equalityFn)` | `createWithEqualityFn` from `'zustand/traditional'` |
-| `useShallow` from `'zustand/shallow'` | `useShallow` from `'zustand/react/shallow'` |
 | Persist auto-persists at creation | Must call `setState` explicitly after creation |
 
 ---
@@ -117,7 +116,7 @@ const increment = useBearStore((s) => s.increment);
 ## `useShallow` — Object/Array Selectors
 
 ```tsx
-import { useShallow } from 'zustand/react/shallow'; // v5 import path
+import { useShallow } from 'zustand/shallow'; // v5 import path
 
 // ❌ new object every render — always triggers re-render
 const { count, name } = useBearStore((s) => ({ count: s.count, name: s.name }));

@@ -4,29 +4,9 @@
 
 ---
 
-## Zod v4 — Breaking Changes from v3
-
-Before writing any schema, know these v4 changes:
-
-| v3 (old) | v4 (correct) |
-|---|---|
-| `z.string().email()` | `z.email()` |
-| `z.string().url()` | `z.url()` |
-| `z.string().uuid()` | `z.uuid()` |
-| `z.string().ip()` | `z.ipv4()` or `z.ipv6()` |
-| `z.string().base64()` | `z.base64()` |
-| `z.record(z.string())` | `z.record(z.string(), ValueSchema)` (2 args required) |
-| `z.nativeEnum(MyEnum)` | `z.enum(MyEnum)` |
-| `{ invalid_type_error: '...' }` | `{ error: '...' }` |
-| `{ required_error: '...' }` | `{ error: '...' }` |
-| `{ errorMap: fn }` | `{ error: fn }` |
-| `.Enum` / `.Values` on z.enum | `.enum` only |
-
-String format validators (`z.email()`, `z.url()`, `z.uuid()`, etc.) are now top-level subclasses of `ZodString`, not method chains. The method-chain forms are **deprecated** and will be removed.
-
----
-
 ## Setup
+
+> **Zod v4 migration**: format validators are now top-level (`z.email()`, `z.url()`, `z.uuid()` — not method chains). `z.record` requires 2 args. `z.nativeEnum` → `z.enum`. Error params unified to `{ error }`. Full migration table in **Anti-Pattern Hard Stops** below.
 
 ```tsx
 import { useForm } from 'react-hook-form';

@@ -13,10 +13,18 @@ AI training data predates breaking changes. The model generates the old API with
 | `useQuery({ onSuccess, onError })` | `useMutation.onSuccess` or `useEffect` on `data` | TanStack Query v5 |
 | `useQuery({ cacheTime: 5000 })` | `useQuery({ gcTime: 5000 })` | TanStack Query v5 |
 | `estimatedItemSize={72}` on FlashList | Remove — auto-handled in v2 | FlashList v2 |
+| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — all size props removed in v2 | FlashList v2 |
 | `import { Audio } from 'expo-av'` | `import { Audio } from 'expo-audio'` | Expo SDK 55 |
 | `forwardRef` on new function components | Plain `ref` prop (still works, not needed) | React 19 |
 | `jsxImportSource: 'nativewind'` in Babel | Remove for NativeWind v5 | NativeWind v5 |
-| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — all size props removed in v2 | FlashList v2 |
+| `z.string().email()` / `.url()` / `.uuid()` | `z.email()` / `z.url()` / `z.uuid()` | Zod v4 |
+| `z.record(z.string())` | `z.record(z.string(), ValueSchema)` | Zod v4 |
+| `z.nativeEnum(E)` | `z.enum(E)` | Zod v4 |
+| `{ invalid_type_error }` / `{ required_error }` | `{ error: '...' }` | Zod v4 |
+| `import create from 'zustand'` | `import { create } from 'zustand'` | Zustand v5 |
+| `create(fn, equalityFn)` | `createWithEqualityFn` from `'zustand/traditional'` | Zustand v5 |
+| `StyleSheet.absoluteFillObject` | `StyleSheet.absoluteFill` | RN 0.85 |
+| `import { MasonryFlashList }` | `<FlashList masonry numColumns={N} />` | FlashList v2 |
 
 **Why it happens:** The model saw thousands of examples of the old API. It generates them fluently because they look like correct code. The fix is always to check the installed major version against what the code uses.
 
@@ -294,71 +302,3 @@ const Schema = z.string()
   .transform((val) => val.toLowerCase()); // only runs after validation passes
 ```
 
----
-
-## 15. Zod v4 API Hallucinations
-
-AI tools trained before mid-2025 produce Zod v3 APIs in Zod v4 projects.
-
-```tsx
-// ❌ Zod v3 — deprecated/broken in v4
-z.string().email('Invalid email')
-z.string().url()
-z.string().uuid()
-z.record(z.string())                         // single arg no longer compiles
-z.nativeEnum(StatusEnum)
-z.string({ invalid_type_error: 'Not text' }) // param removed
-z.string({ required_error: 'Required' })     // param removed
-Status.Enum.active                           // .Enum removed
-Status.Values                                // .Values removed
-
-// ✅ Zod v4
-z.email('Invalid email')
-z.url()
-z.uuid()
-z.record(z.string(), z.string())             // 2 args required
-z.enum(StatusEnum)
-z.string({ error: 'Not text' })             // unified error param
-Status.enum.active                           // .enum only
-```
-
----
-
-## 16. Zustand v5 Import Hallucinations
-
-AI generates Zustand v4 import patterns in v5 projects.
-
-```tsx
-// ❌ Zustand v4 — removed in v5
-import create from 'zustand'                           // default export removed
-import { useShallow } from 'zustand/shallow'           // path changed
-const useStore = create(fn, equalityFn)                // 2nd arg removed
-
-// ✅ Zustand v5
-import { create } from 'zustand'                       // named import only
-import { useShallow } from 'zustand/react/shallow'     // new path
-const useStore = create(fn)                            // no equality fn
-// for equality fn: createWithEqualityFn from 'zustand/traditional'
-```
-
----
-
-## 17. RN 0.85 / SDK 56 Removals
-
-```tsx
-// ❌ StyleSheet.absoluteFillObject — removed in RN 0.85
-<View style={StyleSheet.absoluteFillObject} />
-
-// ✅
-<View style={StyleSheet.absoluteFill} />
-// or define inline: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }
-
-// ❌ MasonryFlashList — removed in FlashList v2
-import { MasonryFlashList } from '@shopify/flash-list'
-<MasonryFlashList numColumns={2} getColumnFlex={...} />
-
-// ✅
-import { FlashList } from '@shopify/flash-list'
-<FlashList masonry numColumns={2} />
-// Note: getColumnFlex is not supported in v2
-```

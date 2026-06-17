@@ -49,7 +49,6 @@ For each category: scan the diff, cite `file:line`, assign severity.
 - `{ invalid_type_error }` / `{ required_error }` in Zod schema — dropped in v4; use `{ error: '...' }`
 - Default import `import create from 'zustand'` — removed in Zustand v5; use `import { create } from 'zustand'`
 - `create(fn, equalityFn)` — equality fn arg removed in Zustand v5; use `createWithEqualityFn` from `'zustand/traditional'`
-- `import { useShallow } from 'zustand/shallow'` — moved to `'zustand/react/shallow'` in v5
 - `import ... from '@react-navigation/native'` on SDK 56 — expo-router no longer depends on react-navigation; use `expo-router` directly
 
 **HIGH:**
@@ -170,7 +169,7 @@ Every `useEffect` in the diff needs a justification. Fail if:
 - `throw` inside a `z.transform()` callback — bypasses ZodError entirely, crashes `safeParse()`
 
 **HIGH:**
-- `mode: 'onChange'` in `useForm` — RHF docs explicitly warn this has "significant impact on performance"; use `mode: 'onBlur'` or `mode: 'onSubmit'`
+- `mode: 'onChange'` in `useForm` — triggers validation on every keystroke, causing re-renders at high frequency; use `mode: 'onBlur'` or `mode: 'onSubmit'`
 - `defaultValues` containing `undefined` fields — conflicts with controlled component state
 - Updating `defaultValues` by re-calling `useForm` with new values — has no effect after mount; use `reset(newValues)`
 - `watch('field')` at the form root — re-renders entire form tree on every change; use `useWatch({ control, name })` in the consuming component

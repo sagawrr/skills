@@ -7,6 +7,22 @@ description: Battle-tested code patterns pinned to Expo SDK 56 (RN 0.85.2, React
 
 > Pinned: Expo SDK 56 · RN 0.85.2 · React 19.2.3 · Reanimated 4 · FlashList v2 · NativeWind v4 · Zustand v5 · Zod v4 · RHF v7
 
+## Reference Loading
+
+**Before reading any reference file**, read `package.json` and use this table to decide which ones to load. Load only what matches — skip the rest.
+
+| If `package.json` contains… | Load |
+|---|---|
+| `react-hook-form` | `references/forms.md` |
+| `reanimated` | `references/animations.md` |
+| `zustand` or `@tanstack/react-query` | `references/state-and-effects.md` |
+| `@shopify/flash-list` | `references/performance.md` |
+| `nativewind` | `references/nativewind.md` |
+
+If `package.json` is unavailable, load only the references directly relevant to the current task.
+
+---
+
 ## Ground Rules
 
 1. **New Architecture is default** (RN 0.76+, Expo SDK 53+). Two silent breakage patterns:
@@ -15,25 +31,15 @@ description: Battle-tested code patterns pinned to Expo SDK 56 (RN 0.85.2, React
 2. **`StyleSheet.absoluteFillObject` removed in RN 0.85** — use `StyleSheet.absoluteFill`
 3. **Expo Router SDK 56**: forks React Navigation — `@react-navigation/*` is no longer a peer dep of `expo-router`. Run the codemod after upgrading.
 4. **React 19 in SDK 56** — `use()`, `useTransition`, `useOptimistic`. `ref` is now a plain prop; `forwardRef` still works but not needed for new components.
-5. **React Compiler (SDK 54+)** — handles most memoization. Don't add `useMemo`/`useCallback` without profiler evidence of bail-out (`useMemoCache` absent in fiber tree = bailed out).
-6. **Reanimated 4 (requires New Architecture)** — `scheduleOnRN` is preferred over `runOnJS`. Layout props can now animate with the native driver (Shared Animation Backend). See `references/animations.md`.
+5. **React Compiler (default in SDK 54+ new projects)** — handles most memoization. Don't add `useMemo`/`useCallback` without profiler evidence of bail-out (`useMemoCache` absent in fiber tree = bailed out).
+6. **Reanimated 4 (requires New Architecture)** — `scheduleOnRN` replaces `runOnJS`. See `references/animations.md`.
 7. **Profile before optimizing** — measure first, fix one thing, re-measure.
 
 ---
 
 ## 1. useEffect — 3 Legitimate Uses
 
-Valid: (1) subscribing to an external system, (2) imperative native call after mount with cleanup, (3) synchronizing two external systems.
-
-| Pattern | Replace with |
-|---|---|
-| Data fetch | `useQuery` (TanStack Query) |
-| Derive value from state/props | Compute during render |
-| Side effect on user event | Put it in the event handler |
-| Layout measurement | `onLayout` callback |
-| Animated derived value | `useDerivedValue` worklet |
-| Store subscription | `useSyncExternalStore` |
-| State reset when ID changes | `key={id}` prop to remount |
+Valid: (1) subscribing to an external system, (2) imperative native call after mount with cleanup, (3) synchronizing two external systems. Full replacement map in `references/state-and-effects.md`.
 
 ```tsx
 // ❌ derives state in an effect — extra render, stale frame
@@ -62,7 +68,7 @@ function Profile({ userPromise }: { userPromise: Promise<User> }) {
 ```tsx
 // Named imports only in v5 — no default exports
 import { create } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
+import { useShallow } from 'zustand/shallow';
 
 // ✅ Selector — re-renders only when subscribed slice changes
 const count = useStore((s) => s.count);
@@ -123,7 +129,7 @@ import { FlashList } from '@shopify/flash-list';
 ## 5. Animations — Reanimated 4
 
 See `references/animations.md`. Core rules:
-- Animate **only** `transform` + `opacity` — layout props can now also be animated via the Shared Animation Backend (RN 0.85+)
+- Animate **only** `transform` + `opacity` for safe native-driver animations
 - Scroll position → `useSharedValue`, never `useState`
 - `scheduleOnRN` preferred over `runOnJS` for calling JS from a worklet
 - CSS transitions: `style={{ transition: { opacity: { duration: 300 } }, opacity: isVisible ? 1 : 0 }}`
@@ -174,7 +180,7 @@ import { Image } from 'expo-image';
 | RN 0.85 | `StyleSheet.absoluteFillObject` removed; layout props animatable with native driver |
 | Expo SDK 56 | RN 0.85.2 + React 19.2.3; Expo Router forks React Navigation (codemod required) |
 | Expo SDK 55 | `expo-av` → `expo-audio` + `expo-video` |
-| Expo SDK 54 | React Compiler available; `react-native-worklets` required for Reanimated |
+| Expo SDK 54 | React Compiler enabled by default in new projects; `react-native-worklets` required for Reanimated |
 
 ---
 
@@ -216,35 +222,3 @@ For NativeWind v4: `references/nativewind.md`.
 
 ---
 
-## 12. Hard Stops
-
-| ❌ | ✅ |
-|---|---|
-| `StyleSheet.absoluteFillObject` | `StyleSheet.absoluteFill` |
-| `z.string().email()` (Zod v4) | `z.email()` |
-| `z.string().url()` (Zod v4) | `z.url()` |
-| `z.record(z.string())` (Zod v4) | `z.record(z.string(), z.string())` |
-| `z.nativeEnum(MyEnum)` (Zod v4) | `z.enum(MyEnum)` |
-| `invalid_type_error` / `required_error` (Zod v4) | unified `error` param |
-| Default import from `'zustand'` (v5) | Named: `import { create } from 'zustand'` |
-| `create(fn, equalityFn)` (Zustand v5) | `createWithEqualityFn` from `'zustand/traditional'` |
-| `MasonryFlashList` | `<FlashList masonry numColumns={N} />` |
-| `estimatedItemSize` on FlashList v2 | Remove — all size props deprecated |
-| Refs on `<View>` without `collapsable={false}` | `<View ref={r} collapsable={false}>` |
-| `useEffect` for derived state | Compute during render |
-| `register()` on RN TextInput | `useController` / `Controller` |
-| `watch()` at form root | `useWatch({ control, name })` |
-| `mode: 'onChange'` in RHF | `mode: 'onBlur'` |
-| `useMemo`/`useCallback` without profiler evidence | Let React Compiler handle it |
-| `{count && <Text>}` where count can be 0 | `{count > 0 && <Text>}` |
-| RSC + EAS Update in production | EAS Update is incompatible with RSC |
-
----
-
-## References
-
-- `references/forms.md` — RHF v7 + Zod v4: useController, formState Proxy, Zod v4 API changes
-- `references/animations.md` — Reanimated 4: scheduleOnRN, CSS transitions, Shared Animation Backend
-- `references/state-and-effects.md` — TanStack Query, Zustand v5 (slices, persist, selectors)
-- `references/performance.md` — FlashList v2 tuning, Hermes, bundle, memory
-- `references/nativewind.md` — NativeWind v4 patterns, dark mode, CSS vars

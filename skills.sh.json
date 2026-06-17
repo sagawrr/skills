@@ -4,14 +4,14 @@
   "groupings": [
     {
       "title": "React Native & Expo",
-      "description": "Production code patterns for Expo SDK 56, RN 0.85, Reanimated 4, FlashList v2, Zustand v5, Zod v4, RHF v7.",
+      "description": "Hardened code patterns for Expo and React Native apps — state, animations, lists, forms, styling, and common pitfalls.",
       "skills": [
         "expo-react-native"
       ]
     },
     {
       "title": "Code Review",
-      "description": "AI-era PR review for React Native — catches version-specific hallucinations, New Architecture breakage, and maintainability issues.",
+      "description": "Automated PR review for React Native — catches broken APIs, performance regressions, and AI-generated anti-patterns before they ship.",
       "skills": [
         "rn-review"
       ]

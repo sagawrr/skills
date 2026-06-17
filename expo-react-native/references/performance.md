@@ -4,6 +4,8 @@
 
 **Measure → Fix one thing → Re-measure → Validate.** Never optimize speculatively.
 
+React Compiler config is in SKILL.md Ground Rule 4. Reanimated 4 patterns are in `references/animations.md`. NativeWind performance is in `references/nativewind.md`.
+
 ---
 
 ## Cold Start / TTI
@@ -125,15 +127,3 @@ function Price({ n }) { return <Text>{fmt.format(n)}</Text>; }
 - Native changes (new native dep, config plugin change) → full `eas build`
 - Delete `sdkVersion` from `app.json` — let Expo manage it
 
----
-
-## React Compiler — SDK 54+
-
-```json
-// app.json — no Babel config needed in SDK 54+
-{ "expo": { "experiments": { "reactCompiler": true } } }
-```
-
-Verify a component is being memoized: in `react-profiler-fiber-tree` output, `useMemoCache` present = compiler memoizing. Absent = compiler bailed out (usually a rules of hooks violation).
-
-Does NOT: optimize node_modules, run during server rendering, or automatically remove all manual `useMemo`/`useCallback` safely.

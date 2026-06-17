@@ -1,7 +1,24 @@
-# NativeWind v4 — Tailwind CSS in React Native
+# NativeWind — Tailwind CSS in React Native
 
-> NativeWind v4 targets Tailwind CSS v3 (pinned to `^3.4.17`). v5 (pre-release) targets Tailwind CSS v4.
-> Current stable: v4.1.x. Install via `npm install nativewind`.
+> **v4** (stable): Tailwind CSS v3, pinned to `^3.4.17`. Current: v4.1.x.
+> **v5** (beta): Tailwind CSS v4. Do not use in production until stable.
+> Install: `npm install nativewind`
+
+---
+
+## Migrating v4 → v5
+
+v5 removes the JSX transform entirely. Two hard breaking changes (both verified 3-0):
+
+1. **Delete `jsxImportSource: 'nativewind'`** from `babel.config.js`
+2. **Delete `'nativewind/babel'`** from presets in `babel.config.js`
+
+v5 replaces the JSX transform with an import rewrite system that redirects React Native imports through `react-native-css/react-native`. **AI tools trained before mid-2025 will produce v4 Babel config for v5 projects** — this is the most common AI-introduced NativeWind error.
+
+v5 does **NOT** require New Architecture (verified refuted — it works on old arch too).
+`vars()` is **NOT** replaced by `VariableContextProvider` in v5 — `vars()` still works.
+
+---
 
 ## Setup (Expo)
 

@@ -4,7 +4,7 @@
 
 [![skills.sh](https://skills.sh/b/sagawrr/skills)](https://skills.sh/sagawrr/skills)
 
-Each skill is a small, focused instruction set that helps an agent do one kind of work better. The goal is simple: less repeated setup, better judgment, and more consistent results across tools and agent environments.
+Each skill is a focused instruction set that helps an AI agent do one kind of work better — less repeated setup, sharper judgment, and more consistent results across tools and agent environments.
 
 ## Install
 
@@ -17,14 +17,20 @@ npx skills add sagawrr/skills
 Install one skill:
 
 ```bash
-npx skills add sagawrr/skills --skill write-better-error-messages
+npx skills add sagawrr/skills --skill expo-react-native
 ```
 
 ## Skills
 
+### React Native & Expo
+
 | Skill | Purpose |
 | --- | --- |
-| [`write-better-error-messages`](write-better-error-messages/SKILL.md) | Write and review useful product error messages. |
+| [`expo-react-native`](expo-react-native/SKILL.md) | Hardened code patterns for Expo and React Native — state, animations, lists, forms, and styling. Covers useEffect replacements, Zustand, TanStack Query, Reanimated, FlashList, NativeWind, React Hook Form + Zod, and New Architecture gotchas. |
+| [`rn-review`](rn-review/SKILL.md) | PR review skill for React Native — scans diffs for broken APIs, New Architecture breakage, AI-generated anti-patterns, and maintainability issues. Run with `/rn-review` before merging. |
 
-## References
-- Wix UX: ["When life gives you lemons, write better error messages"](https://wix-ux.com/when-life-gives-you-lemons-write-better-error-messages-46c5223e1a2f)
+### Writing & Communication
+
+| Skill | Purpose |
+| --- | --- |
+| [`write-better-error-messages`](write-better-error-messages/SKILL.md) | Write and review useful product error messages that explain what happened, provide a recovery path, and avoid blame or jargon. |

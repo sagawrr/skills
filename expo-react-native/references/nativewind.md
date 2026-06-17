@@ -11,7 +11,7 @@ v5 removes the JSX transform. Two source-code changes required (both verified):
 1. Remove `jsxImportSource: 'nativewind'` from Babel config
 2. Remove `'nativewind/babel'` from Babel presets
 
-v5 does **not** require New Architecture (verified refuted). `vars()` still works in v5 (not replaced).
+v5 does **not** require New Architecture. `vars()` still works in v5.
 
 ---
 

@@ -13,9 +13,10 @@ Use error messages as product recovery tools. Based on Wix UX's "When life gives
 
 1. Gather only the context needed to write truthfully.
 2. Classify the current issue: generic, unclear, blameful, jargon-heavy, dead-end, or wrong tone.
-3. Decide whether copy can fix it or whether product/engineering must map causes, impact, recovery, or instrumentation.
+3. Decide whether copy can fix it or whether product/engineering must map causes, impact, recovery, or instrumentation. If the error condition can be eliminated upstream — do that first, before improving the copy.
 4. Rewrite with the helpful-error structure.
-5. Return improved copy plus follow-ups for anything copy cannot responsibly solve.
+5. Flag for testing with a real user or stakeholder when the message is high-stakes, novel, or replacing entrenched copy.
+6. Return improved copy plus follow-ups for anything copy cannot responsibly solve.
 
 ## Context Needed
 
@@ -37,12 +38,14 @@ Flag messages with these problems:
 
 - Cutesy tone in a high-stakes moment: "Oops!", "Uh oh!", "Yikes!"
 - Technical jargon: "fetch failed", "credentials denied", "500", "unprocessable entity", "timeout exception"
+- Raw error codes or HTTP status codes exposed directly to users
 - Blame: "You entered the wrong...", "Your account caused...", "Stripe is not responding"
 - Generic wording when the system knows more: "Something went wrong"
 - False certainty: claiming the issue is fixed by retrying when it might persist
 - Dead ends: no next step, contact path, or alternative
 - Missing reassurance: leaving users unsure whether work, money, orders, or data were affected
 - Unclear explanations: words are present, but the user still cannot tell what happened
+- First-person software voice: "I couldn't find that", "I'm having trouble" — the product speaks, not a persona
 
 ## Helpful Structure
 
@@ -86,6 +89,8 @@ Avoid third-party blame such as "[service] isn't responding." Prefer "We're havi
 - Use "please" sparingly for high-friction asks, support handoffs, or cases the product cannot resolve for the user.
 - Focus on the problem and recovery, not on the user's mistake.
 - Prefer active, concrete verbs: "Check", "Reconnect", "Try again", "Contact support".
+- Use short sentences, plain words. Write so a non-technical user can act on the message without re-reading.
+- Write for localization: avoid idioms, keep variable substitution at end of strings where possible.
 
 ## Audit Output
 
@@ -124,14 +129,19 @@ Use these when copy cannot be responsibly written from available context:
 - How often does this happen, and where in the flow?
 - What support path should users use if it persists?
 
+## Placement
+
+Error messages should appear near the element that triggered them — inline below a field, not only at the top of a form or in a distant toast. Placement is as important as wording: a correct message in the wrong place is still a usability failure. Flag placement issues in the Follow-up column when copy alone cannot fix them.
+
 ## Final Check
 
 Before finalizing, confirm:
 
 - The message answers "what happened?"
 - It answers "why?" when known.
-- It avoids jargon, blame, and cute tone.
+- It avoids jargon, blame, cute tone, and raw error codes.
 - It gives a realistic next step.
 - It reassures users where possible.
 - It includes a way out for unrecoverable or recurring failures.
 - It identifies product, data, or engineering work when copy alone is not enough.
+- It appears near the triggering element (or flags placement as a follow-up).

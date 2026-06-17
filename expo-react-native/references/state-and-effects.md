@@ -48,6 +48,7 @@ const mutation = useMutation({
     return { snapshot };
   },
   // onError: 4 args — (error, variables, onMutateResult, context)
+  // onMutateResult = return value of onMutate; context = internal MutationFunctionContext
   onError: (_, __, onMutateResult) => queryClient.setQueryData(['posts'], onMutateResult?.snapshot),
   onSettled: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
 });
@@ -78,7 +79,7 @@ const items = data?.pages.flatMap(p => p.items) ?? [];
 |---|---|
 | Default import: `import create from 'zustand'` | Named: `import { create } from 'zustand'` |
 | `create(fn, equalityFn)` | `createWithEqualityFn` from `'zustand/traditional'` |
-| Persist auto-persists at creation | Must call `setState` explicitly after creation |
+| Persist auto-writes initial state to storage on creation | Initial state no longer auto-persisted; subsequent `setState` calls still persist normally |
 
 ---
 
@@ -198,7 +199,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import * as SecureStore from 'expo-secure-store';
 
-// v5: persist no longer auto-persists at store creation
+// v5: initial state no longer auto-written to storage on creation; rehydration on load still works
 const useAppStore = create<AppState>()(
   persist(
     immer((set) => ({

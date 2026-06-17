@@ -23,7 +23,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 ## 2. Reanimated 4
 
 **HIGH:**
-- `useAnimatedStyle` returns `width`, `height`, `top`, `left`, `margin`, or `padding` — triggers native layout recalculation every frame; animate `transform` + `opacity` only
+- `useAnimatedStyle` returns `width`, `height`, `top`, `left`, `margin`, or `padding` on RN < 0.85 — triggers native layout recalculation every frame; use `transform` + `opacity` only pre-0.85 (RN 0.85+ with New Architecture supports layout prop animation via Shared Animation Backend)
 - `useAnimatedScrollHandler` attached to a plain `<ScrollView>` — must be `<Animated.ScrollView>`
 - `useAnimatedReaction` used to derive a value — should be `useDerivedValue`; `useAnimatedReaction` is for side effects that need access to the previous value, not for computing derived values
 - Starting a new animation while another is mid-flight from a different code path — use `cancelAnimation(sv)` to explicitly stop it first; Reanimated auto-cancels on same-source reassignment, but cross-source conflicts need explicit cancellation
@@ -39,7 +39,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 **BLOCKER (confirmed API removals — AI commonly generates these for wrong versions):**
 - `useQuery({ onSuccess, onError, onSettled })` — removed from `useQuery` in TanStack Query v5; replace with `useEffect` watching `data`/`error`, or global `QueryClient` callbacks for app-wide notifications (`useMutation.onSuccess` is for mutations only, not a query replacement)
 - `useQuery({ cacheTime })` — renamed to `gcTime` in TanStack Query v5
-- `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — all removed in v2
+- `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — deprecated in v2, no longer used; delete them
 - `MasonryFlashList` import — removed; use `<FlashList masonry numColumns={N} />`
 - `import { Audio } from 'expo-av'` / `import { Video } from 'expo-av'` — split into `expo-audio` + `expo-video` in SDK 55
 - `StyleSheet.absoluteFillObject` — removed in RN 0.85; use `StyleSheet.absoluteFill`

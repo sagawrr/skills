@@ -113,7 +113,7 @@ import { FlashList } from '@shopify/flash-list';
   getItemType={item => item.type}   // required for heterogeneous lists
   onEndReached={fetchNextPage}
   onEndReachedThreshold={0.5}
-  // estimatedItemSize / estimatedListSize / estimatedFirstItemOffset — ALL removed in v2
+  // estimatedItemSize / estimatedListSize / estimatedFirstItemOffset — deprecated in v2, no longer used; delete them
   // masonry layout (replaces standalone MasonryFlashList):
   // masonry numColumns={2}
 />

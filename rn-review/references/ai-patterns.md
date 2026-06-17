@@ -13,7 +13,7 @@ AI training data predates breaking changes. The model generates the old API with
 | `useQuery({ onSuccess, onError })` | `useEffect` watching `data`/`error`, or global `QueryClient` callbacks | TanStack Query v5 |
 | `useQuery({ cacheTime: 5000 })` | `useQuery({ gcTime: 5000 })` | TanStack Query v5 |
 | `estimatedItemSize={72}` on FlashList | Remove — auto-handled in v2 | FlashList v2 |
-| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — all size props removed in v2 | FlashList v2 |
+| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — deprecated in v2, no longer used | FlashList v2 |
 | `import { Audio } from 'expo-av'` | `import { Audio } from 'expo-audio'` | Expo SDK 55 |
 | `forwardRef` on new function components | Plain `ref` prop (still works, not needed) | React 19 |
 | `jsxImportSource: 'nativewind'` in Babel | Remove for NativeWind v5 | NativeWind v5 |
@@ -107,10 +107,10 @@ const cardRef = useRef<View>(null);
 
 **State batching regression:**
 ```tsx
-// ❌ two synchronous setStates — Old arch: two renders. New arch: one render (intermediate lost).
-// The await below does NOT cause batching — batching only applies to synchronous state updates.
+// ❌ two synchronous setStates — Old arch: two separate renders. New arch: one batched render.
+// The intermediate state (count=1, flag=false) never renders — it's skipped entirely.
 setCount(1);
-setFlag(true); // both batched into one render — intermediate count=1/flag=false never renders
+setFlag(true); // batched into one render in New Architecture
 
 // ✅ if the intermediate render matters, use a reducer (single dispatch = single render)
 dispatch({ type: 'FETCH_START' });            // sets loading=true, data=null in one render

@@ -1,5 +1,7 @@
 # RN Review Checklist
 
+> Pinned: Expo SDK 56 · RN 0.85 · Zustand v5 · Zod v4 · RHF v7 · FlashList v2
+
 For each category: scan the diff, cite `file:line`, assign severity.
 
 ---
@@ -35,17 +37,26 @@ For each category: scan the diff, cite `file:line`, assign severity.
 
 ## 3. API Version Correctness
 
-**BLOCKER (confirmed API removals):**
-- `useQuery({ onSuccess, onError, onSettled })` — these callbacks were removed from `useQuery` in TanStack Query v5; they still exist on `useMutation`
+**BLOCKER (confirmed API removals — AI commonly generates these for wrong versions):**
+- `useQuery({ onSuccess, onError, onSettled })` — removed from `useQuery` in TanStack Query v5; use `useMutation.onSuccess` or `useEffect` on `data`
 - `useQuery({ cacheTime })` — renamed to `gcTime` in TanStack Query v5
-- `estimatedItemSize` on `<FlashList>` — deprecated in v2; remove it
-- `import { Audio } from 'expo-av'` / `import { Video } from 'expo-av'` — split into `expo-audio` and `expo-video` in SDK 55
+- `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — all removed in v2
+- `MasonryFlashList` import — removed; use `<FlashList masonry numColumns={N} />`
+- `import { Audio } from 'expo-av'` / `import { Video } from 'expo-av'` — split into `expo-audio` + `expo-video` in SDK 55
+- `StyleSheet.absoluteFillObject` — removed in RN 0.85; use `StyleSheet.absoluteFill`
+- `z.string().email()` / `.url()` / `.uuid()` — deprecated in Zod v4; use `z.email()` / `z.url()` / `z.uuid()`
+- `z.record(z.string())` single-arg — no longer compiles in Zod v4; use `z.record(z.string(), ValueSchema)`
+- `z.nativeEnum(E)` — deprecated in Zod v4; use `z.enum(E)`
+- `{ invalid_type_error }` / `{ required_error }` in Zod schema — dropped in v4; use `{ error: '...' }`
+- Default import `import create from 'zustand'` — removed in Zustand v5; use `import { create } from 'zustand'`
+- `create(fn, equalityFn)` — equality fn arg removed in Zustand v5; use `createWithEqualityFn` from `'zustand/traditional'`
+- `import { useShallow } from 'zustand/shallow'` — moved to `'zustand/react/shallow'` in v5
+- `import ... from '@react-navigation/native'` on SDK 56 — expo-router no longer depends on react-navigation; use `expo-router` directly
 
 **HIGH:**
 - `import { Image } from 'react-native'` — use `expo-image`
 - `import { SafeAreaView } from 'react-native'` — use `react-native-safe-area-context`
 - `TouchableOpacity` or `TouchableHighlight` — use `Pressable`
-- `import ... from '@react-navigation/native'` on SDK 56+ — use `expo-router` entry points
 
 ---
 

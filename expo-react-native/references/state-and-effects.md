@@ -1,5 +1,7 @@
 # State & Effects
 
+> Pinned: Zustand v5 · TanStack Query v5
+
 ---
 
 ## useEffect Replacement Map
@@ -16,26 +18,25 @@
 
 ---
 
-## TanStack Query
+## TanStack Query v5
 
 ```tsx
-// Query — reactive on queryKey changes
+// Query — reactive on queryKey
 const { data, isPending } = useQuery({
   queryKey: ['user', id],
   queryFn: () => api.users.get(id),
-  staleTime: 60_000,   // serve from cache if fresh < 1min
-  gcTime: 5 * 60_000,  // keep in cache 5min after unmount
+  staleTime: 60_000,
+  gcTime: 5 * 60_000,   // renamed from cacheTime in v5
 });
 
-// Optimistic mutation — rollback on error
+// Optimistic mutation with rollback
 const mutation = useMutation({
   mutationFn: (post: NewPost) => api.posts.create(post),
   onMutate: async (newPost) => {
     await queryClient.cancelQueries({ queryKey: ['posts'] });
     const snapshot = queryClient.getQueryData<Post[]>(['posts']);
     queryClient.setQueryData(['posts'], (old: Post[]) => [
-      ...(old ?? []),
-      { ...newPost, id: 'temp' },
+      ...(old ?? []), { ...newPost, id: 'temp' },
     ]);
     return { snapshot };
   },
@@ -43,7 +44,7 @@ const mutation = useMutation({
   onSettled: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
 });
 
-// Infinite scroll + FlashList
+// Infinite scroll + FlashList v2
 const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
   queryKey: ['feed'],
   queryFn: ({ pageParam }) => api.feed.get({ cursor: pageParam }),
@@ -62,12 +63,23 @@ const items = data?.pages.flatMap(p => p.items) ?? [];
 
 ---
 
-## Zustand
+## Zustand v5 — Breaking Changes from v4
 
-### Store shape — colocate state and actions
+| v4 (old) | v5 (correct) |
+|---|---|
+| Default import: `import create from 'zustand'` | Named: `import { create } from 'zustand'` |
+| `create(fn, equalityFn)` | `createWithEqualityFn` from `'zustand/traditional'` |
+| `useShallow` from `'zustand/shallow'` | `useShallow` from `'zustand/react/shallow'` |
+| Persist auto-persists at creation | Must call `setState` explicitly after creation |
+
+---
+
+## Zustand v5 — Store Shape
+
+Colocate state and actions. Single store per app; split large apps with slices.
 
 ```tsx
-import { create } from 'zustand';
+import { create } from 'zustand';  // named import only in v5
 
 interface BearState {
   count: number;
@@ -77,7 +89,7 @@ interface BearState {
   reset: () => void;
 }
 
-const INITIAL: Pick<BearState, 'count' | 'name'> = { count: 0, name: '' };
+const INITIAL = { count: 0, name: '' };
 
 const useBearStore = create<BearState>()((set) => ({
   ...INITIAL,
@@ -87,7 +99,9 @@ const useBearStore = create<BearState>()((set) => ({
 }));
 ```
 
-### Selectors — always subscribe to a slice, not the whole store
+---
+
+## Selectors — Always Subscribe to a Slice
 
 ```tsx
 // ❌ subscribes to entire store — re-renders on any state change
@@ -98,19 +112,25 @@ const count = useBearStore((s) => s.count);
 const increment = useBearStore((s) => s.increment);
 ```
 
-### useShallow — when selector returns a new object/array each time
+---
+
+## `useShallow` — Object/Array Selectors
 
 ```tsx
-import { useShallow } from 'zustand/react/shallow';
+import { useShallow } from 'zustand/react/shallow'; // v5 import path
 
-// ❌ new array on every render — causes re-render even if values didn't change
-const [count, name] = useBearStore((s) => [s.count, s.name]);
+// ❌ new object every render — always triggers re-render
+const { count, name } = useBearStore((s) => ({ count: s.count, name: s.name }));
 
-// ✅ shallow equality check — only re-renders when count or name actually changes
-const { count, name } = useBearStore(useShallow((s) => ({ count: s.count, name: s.name })));
+// ✅ shallow equality — only re-renders when count or name actually changes
+const { count, name } = useBearStore(
+  useShallow((s) => ({ count: s.count, name: s.name }))
+);
 ```
 
-### Auto-generated selectors (large stores)
+---
+
+## Auto-Generated Selectors (large stores)
 
 ```tsx
 import { StoreApi, UseBoundStore } from 'zustand';
@@ -123,58 +143,59 @@ function createSelectors<S extends UseBoundStore<StoreApi<object>>>(_store: S) {
   const store = _store as WithSelectors<typeof _store>;
   store.use = {};
   for (const k of Object.keys(store.getState())) {
-    (store.use as Record<string, unknown>)[k] = () => store((s) => s[k as keyof typeof s]);
+    (store.use as Record<string, unknown>)[k] = () =>
+      store((s) => s[k as keyof typeof s]);
   }
   return store;
 }
 
 const useBearStore = createSelectors(create<BearState>()(/* ... */));
 
-// Usage — no selector boilerplate
+// No selector boilerplate
 const count = useBearStore.use.count();
 const increment = useBearStore.use.increment();
 ```
 
-### Slices pattern (large app)
+---
+
+## Slices Pattern
 
 ```tsx
 import { StateCreator } from 'zustand';
 
-// Fish slice
 interface FishSlice { fish: number; addFish: () => void; }
 const createFishSlice: StateCreator<FishSlice & BearSlice, [], [], FishSlice> =
   (set) => ({ fish: 0, addFish: () => set((s) => ({ fish: s.fish + 1 })) });
 
-// Bear slice
-interface BearSlice { bears: number; addBear: () => void; eatFish: () => void; }
+interface BearSlice { bears: number; eatFish: () => void; }
 const createBearSlice: StateCreator<BearSlice & FishSlice, [], [], BearSlice> =
   (set, get) => ({
     bears: 0,
-    addBear: () => set((s) => ({ bears: s.bears + 1 })),
-    eatFish: () => set((s) => ({ fish: s.fish - 1 })), // cross-slice via get()
+    eatFish: () => set((s) => ({ fish: s.fish - 1 })),
   });
 
-// Combine — apply middleware only at the root, not inside slices
+// Apply middleware at root only — not inside individual slices
 const useStore = create<BearSlice & FishSlice>()((...a) => ({
   ...createBearSlice(...a),
   ...createFishSlice(...a),
 }));
 ```
 
-### Persist to SecureStore (React Native)
+---
+
+## Persist to SecureStore (React Native)
 
 ```tsx
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import * as SecureStore from 'expo-secure-store';
 
+// v5: persist no longer auto-persists at store creation
 const useAppStore = create<AppState>()(
   persist(
     immer((set) => ({
       theme: 'dark' as 'light' | 'dark',
-      userId: null as string | null,
       setTheme: (t) => set((s) => { s.theme = t }),
-      setUser:  (id) => set((s) => { s.userId = id }),
     })),
     {
       name: 'app-store',
@@ -183,61 +204,61 @@ const useAppStore = create<AppState>()(
         setItem:    SecureStore.setItemAsync,
         removeItem: SecureStore.deleteItemAsync,
       })),
-      // Never persist sensitive fields — only what's safe to store
-      partialize: (s) => ({ theme: s.theme }),
+      partialize: (s) => ({ theme: s.theme }), // only persist safe fields
     }
   )
 );
 ```
 
-### Reading and writing outside React
+---
+
+## Read / Write Outside React
 
 ```tsx
-// Read — anywhere (event handlers, native callbacks, utils)
+// Read anywhere
 const { count } = useBearStore.getState();
 
-// Write — anywhere
+// Write anywhere (event handlers, native callbacks)
 useBearStore.setState((s) => ({ count: s.count + 1 }));
 
-// Subscribe — for non-React integrations
+// replace: true in v5 requires complete state (stricter types)
+useBearStore.setState(INITIAL, true); // full replacement — must match entire state shape
+
+// Subscribe (non-React integrations)
 const unsub = useBearStore.subscribe(
   (state) => state.count,
-  (count) => console.log('count changed:', count)
+  (count) => console.log('count:', count)
 );
-// Call unsub() to unsubscribe
 ```
 
-### Dependency injection via Context (stores that need props)
+---
+
+## Context Injection (prop-initialized stores)
 
 ```tsx
-import { createContext, useContext, useRef } from 'react';
+import { createContext, use, useRef } from 'react';
 import { createStore, useStore } from 'zustand';
 
-interface CountStore { count: number; increment: () => void; }
-type CountStoreApi = ReturnType<typeof createStore<CountStore>>;
-const CountStoreContext = createContext<CountStoreApi | null>(null);
+type CountStore = { count: number; increment: () => void };
+type CountApi = ReturnType<typeof createStore<CountStore>>;
+const CountCtx = createContext<CountApi | null>(null);
 
-// Provider — initialize with props
-function CountStoreProvider({ initialCount = 0, children }: { initialCount?: number; children: React.ReactNode }) {
-  const storeRef = useRef<CountStoreApi>();
-  if (!storeRef.current) {
-    storeRef.current = createStore<CountStore>()((set) => ({
-      count: initialCount,
+function CountProvider({ initial = 0, children }: { initial?: number; children: React.ReactNode }) {
+  const ref = useRef<CountApi>();
+  if (!ref.current) {
+    ref.current = createStore<CountStore>()((set) => ({
+      count: initial,
       increment: () => set((s) => ({ count: s.count + 1 })),
     }));
   }
-  return <CountStoreContext.Provider value={storeRef.current}>{children}</CountStoreContext.Provider>;
+  return <CountCtx.Provider value={ref.current}>{children}</CountCtx.Provider>;
 }
 
-// Consumer hook
-function useCountStore<T>(selector: (state: CountStore) => T) {
-  const store = useContext(CountStoreContext);
-  if (!store) throw new Error('Missing CountStoreProvider');
+function useCountStore<T>(selector: (s: CountStore) => T) {
+  const store = use(CountCtx); // React 19 use()
+  if (!store) throw new Error('Missing CountProvider');
   return useStore(store, selector);
 }
-
-// Usage
-const count = useCountStore((s) => s.count);
 ```
 
 ---
@@ -245,16 +266,13 @@ const count = useCountStore((s) => s.count);
 ## Context Rules
 
 ```tsx
-// ✅ Context only for stable, rarely-changing values (auth, theme, i18n)
-const AuthContext = createContext<AuthUser | null>(null);
-
-// React 19: use() works in conditionals; useContext does not
+// Context only for stable values (auth, theme, i18n)
 export function useAuth() {
-  const ctx = use(AuthContext);
+  const ctx = use(AuthContext); // React 19 — works in conditionals
   if (!ctx) throw new Error('useAuth must be inside AuthProvider');
   return ctx;
 }
 
-// ❌ Fast-changing values in context re-render ALL consumers on every change
-// → use Zustand selectors or useSharedValue instead
+// ❌ Fast-changing values in context re-render ALL consumers
+// → Zustand selector or useSharedValue instead
 ```

@@ -293,3 +293,72 @@ const Schema = z.string()
   .refine((val) => val.includes('@'), 'Enter a valid email')
   .transform((val) => val.toLowerCase()); // only runs after validation passes
 ```
+
+---
+
+## 15. Zod v4 API Hallucinations
+
+AI tools trained before mid-2025 produce Zod v3 APIs in Zod v4 projects.
+
+```tsx
+// ❌ Zod v3 — deprecated/broken in v4
+z.string().email('Invalid email')
+z.string().url()
+z.string().uuid()
+z.record(z.string())                         // single arg no longer compiles
+z.nativeEnum(StatusEnum)
+z.string({ invalid_type_error: 'Not text' }) // param removed
+z.string({ required_error: 'Required' })     // param removed
+Status.Enum.active                           // .Enum removed
+Status.Values                                // .Values removed
+
+// ✅ Zod v4
+z.email('Invalid email')
+z.url()
+z.uuid()
+z.record(z.string(), z.string())             // 2 args required
+z.enum(StatusEnum)
+z.string({ error: 'Not text' })             // unified error param
+Status.enum.active                           // .enum only
+```
+
+---
+
+## 16. Zustand v5 Import Hallucinations
+
+AI generates Zustand v4 import patterns in v5 projects.
+
+```tsx
+// ❌ Zustand v4 — removed in v5
+import create from 'zustand'                           // default export removed
+import { useShallow } from 'zustand/shallow'           // path changed
+const useStore = create(fn, equalityFn)                // 2nd arg removed
+
+// ✅ Zustand v5
+import { create } from 'zustand'                       // named import only
+import { useShallow } from 'zustand/react/shallow'     // new path
+const useStore = create(fn)                            // no equality fn
+// for equality fn: createWithEqualityFn from 'zustand/traditional'
+```
+
+---
+
+## 17. RN 0.85 / SDK 56 Removals
+
+```tsx
+// ❌ StyleSheet.absoluteFillObject — removed in RN 0.85
+<View style={StyleSheet.absoluteFillObject} />
+
+// ✅
+<View style={StyleSheet.absoluteFill} />
+// or define inline: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }
+
+// ❌ MasonryFlashList — removed in FlashList v2
+import { MasonryFlashList } from '@shopify/flash-list'
+<MasonryFlashList numColumns={2} getColumnFlex={...} />
+
+// ✅
+import { FlashList } from '@shopify/flash-list'
+<FlashList masonry numColumns={2} />
+// Note: getColumnFlex is not supported in v2
+```

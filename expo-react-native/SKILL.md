@@ -1,27 +1,29 @@
 ---
 name: expo-react-native
-description: Battle-tested Expo and React Native code patterns for New Architecture (RN 0.76+), Reanimated 4, FlashList v2, NativeWind v4/v5. Use when writing, reviewing, or refactoring React Native component code. Covers hooks, state, animations, lists, images, and styling patterns — not build config or tooling.
+description: Battle-tested code patterns pinned to Expo SDK 56 (RN 0.85.2, React 19.2.3, Hermes v1), Reanimated 4, FlashList v2, NativeWind v4, Zustand v5, Zod v4, React Hook Form v7. Use when writing, reviewing, or refactoring React Native component code. Covers hooks, state, animations, lists, images, forms, and styling — not build config or tooling.
 ---
 
-# Expo / React Native — Code Patterns
+# Expo / React Native — Hardened Patterns
 
-> Verified: reactnative.dev, expo.dev, shopify.engineering, software-mansion-labs/skills, callstackincubator/agent-skills, expo/skills, nativewind.dev
+> Pinned: Expo SDK 56 · RN 0.85.2 · React 19.2.3 · Reanimated 4 · FlashList v2 · NativeWind v4 · Zustand v5 · Zod v4 · RHF v7
 
 ## Ground Rules
 
-1. **New Architecture is default** (RN 0.76+, Expo SDK 53+). Two silent breakage patterns to fix proactively:
-   - Auto state-batching drops intermediate values — components relying on them silently break
+1. **New Architecture is default** (RN 0.76+, Expo SDK 53+). Two silent breakage patterns:
+   - Auto state-batching drops intermediate values — components relying on them break silently
    - View flattening makes refs null — add `collapsable={false}` to every `<View ref={...}>`
-2. **React 19 in SDK 53/54** — `use()`, `useTransition`, `useOptimistic`. `ref` is now a plain prop; `forwardRef` still works but is no longer needed for new code.
-3. **React Compiler (SDK 54+)** — handles most memoization automatically. Don't add `useMemo`/`useCallback` without profiler evidence that a component is bailing out.
-4. **Reanimated 4 (stable, requires New Architecture)** — `scheduleOnRN` is the preferred API over `runOnJS` for calling JS from a worklet. Both work; `scheduleOnRN` is the modern form.
-5. **Profile before optimizing** — measure first, fix one thing, re-measure.
+2. **`StyleSheet.absoluteFillObject` removed in RN 0.85** — use `StyleSheet.absoluteFill`
+3. **Expo Router SDK 56**: forks React Navigation — `@react-navigation/*` is no longer a peer dep of `expo-router`. Run the codemod after upgrading.
+4. **React 19 in SDK 56** — `use()`, `useTransition`, `useOptimistic`. `ref` is now a plain prop; `forwardRef` still works but not needed for new components.
+5. **React Compiler (SDK 54+)** — handles most memoization. Don't add `useMemo`/`useCallback` without profiler evidence of bail-out (`useMemoCache` absent in fiber tree = bailed out).
+6. **Reanimated 4 (requires New Architecture)** — `scheduleOnRN` is preferred over `runOnJS`. Layout props can now animate with the native driver (Shared Animation Backend). See `references/animations.md`.
+7. **Profile before optimizing** — measure first, fix one thing, re-measure.
 
 ---
 
 ## 1. useEffect — 3 Legitimate Uses
 
-Valid: (1) subscribing to an external system with no `useSyncExternalStore` interface, (2) imperative native call after mount with cleanup, (3) synchronizing two external systems. Everything else has a better primitive:
+Valid: (1) subscribing to an external system, (2) imperative native call after mount with cleanup, (3) synchronizing two external systems.
 
 | Pattern | Replace with |
 |---|---|
@@ -41,56 +43,51 @@ useEffect(() => setFiltered(items.filter(fn)), [items, fn]);
 const filtered = items.filter(fn);
 
 // ❌ user event side effect in an effect
-useEffect(() => {
-  if (submitted) analytics.track('submitted');
-}, [submitted]);
+useEffect(() => { if (submitted) analytics.track('submitted'); }, [submitted]);
 
-// ✅ in the handler where it belongs
-async function handleSubmit() {
-  await submit(data);
-  analytics.track('submitted');
+// ✅ in the handler
+async function handleSubmit() { await submit(data); analytics.track('submitted'); }
+
+// use() — promise must be stable (created outside render)
+function Profile({ userPromise }: { userPromise: Promise<User> }) {
+  const user = use(userPromise); // wrap parent in <Suspense> + <ErrorBoundary>
+  return <Text>{user.name}</Text>;
 }
 ```
 
 ---
 
-## 2. State
+## 2. State — Zustand v5
 
 ```tsx
-// Server state — TanStack Query. Never useState/Redux for server data.
-const { data, isPending } = useQuery({ queryKey: ['user', id], queryFn: () => fetchUser(id) });
+// Named imports only in v5 — no default exports
+import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 
-// Client global state — Zustand with selectors (re-renders only on subscribed slice change)
-const count = useStore((s) => s.count);       // re-renders only when count changes
-const increment = useStore((s) => s.increment); // stable action reference
+// ✅ Selector — re-renders only when subscribed slice changes
+const count = useStore((s) => s.count);
 
-// useShallow when selector returns object/array
+// ✅ useShallow — when selector returns object/array (prevents re-render on same shallow values)
 const { count, name } = useStore(useShallow((s) => ({ count: s.count, name: s.name })));
 
-// Context — stable values only (auth, theme, i18n)
-// Fast-changing values in context re-render ALL consumers — use Zustand selectors instead
-
-// React 19: use() works in conditionals; useContext does not
-const user = use(AuthContext);
+// Context for stable values (auth, theme) — use() in React 19
+const user = use(AuthContext); // works in conditionals; useContext does not
 ```
+
+See `references/state-and-effects.md` for full Zustand v5 patterns, slices, persist.
 
 ---
 
-## 3. React 19 Hooks
+## 3. React 19
 
 ```tsx
-// useTransition — input stays urgent, expensive update is interruptible
 const [isPending, startTransition] = useTransition();
-startTransition(() => setSearchQuery(text));
+startTransition(() => setSearchQuery(text)); // interruptible
 
-// useDeferredValue — render stale value while new one is computing
-const deferred = useDeferredValue(query); // pass to heavy list, not the input
-
-// useOptimistic — instant UI while async op runs
 const [likes, addOptimistic] = useOptimistic(serverLikes, (cur, inc) => cur + inc);
 async function handleLike() { addOptimistic(1); await likePost(id); }
 
-// ref is a plain prop in React 19 (forwardRef still works, just no longer needed)
+// ref is a plain prop in React 19
 function Input({ ref, ...props }: Props & { ref?: Ref<TextInput> }) {
   return <TextInput ref={ref} {...props} />;
 }
@@ -106,84 +103,82 @@ import { FlashList } from '@shopify/flash-list';
 <FlashList
   data={items}
   renderItem={({ item }) => <ItemRow item={item} />}
-  keyExtractor={item => item.id}          // never index — breaks recycler identity
-  getItemType={item => item.type}         // required for heterogeneous lists
+  keyExtractor={item => item.id}
+  getItemType={item => item.type}   // required for heterogeneous lists
   onEndReached={fetchNextPage}
   onEndReachedThreshold={0.5}
-  // estimatedItemSize — removed in v2, do not add
+  // estimatedItemSize / estimatedListSize / estimatedFirstItemOffset — ALL removed in v2
+  // masonry layout (replaces standalone MasonryFlashList):
+  // masonry numColumns={2}
 />
 ```
 
 - `renderItem` must be a stable reference — no inline arrow functions
-- `recyclingKey={item.id}` on every `expo-image` inside list items (prevents stale image flash)
-- `ScrollView` + `.map()` is wrong for any list > 20 items
+- `recyclingKey={item.id}` on every `expo-image` inside list items
+- Never use `index` as `keyExtractor` — breaks recycler identity
+- `MasonryFlashList` no longer exists — use `<FlashList masonry numColumns={2} />`
 
 ---
 
 ## 5. Animations — Reanimated 4
 
-See `references/animations.md` for full patterns.
-
-```tsx
-// Only animate GPU-composited properties
-const style = useAnimatedStyle(() => ({
-  transform: [{ translateX: withSpring(x.value) }],
-  opacity: withTiming(visible.value ? 1 : 0),
-  // ❌ never: width, height, top, left, margin, padding — triggers layout every frame
-}));
-
-// Scroll position — shared value, never useState
-const scrollY = useSharedValue(0);
-const handler = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
-
-// Calling JS from a worklet — scheduleOnRN is the modern form (Reanimated 4.1+)
-import { scheduleOnRN } from 'react-native-worklets'; // or from 'react-native-reanimated'
-onScroll: (e) => {
-  scrollY.value = e.contentOffset.y;
-  if (e.contentOffset.y > 100) scheduleOnRN(onHeaderVisible);
-}
-
-// CSS transitions — Reanimated 4 + New Architecture only
-<Animated.View style={{ transition: { opacity: { duration: 300 } }, opacity: isVisible ? 1 : 0 }} />
-```
+See `references/animations.md`. Core rules:
+- Animate **only** `transform` + `opacity` — or now layout props **with `useNativeDriver: true`** via Shared Animation Backend
+- Scroll position → `useSharedValue`, never `useState`
+- `scheduleOnRN` preferred over `runOnJS` for calling JS from a worklet
+- CSS transitions: `style={{ transition: { opacity: { duration: 300 } }, opacity: isVisible ? 1 : 0 }}`
 
 ---
 
-## 6. Images
+## 6. Forms — RHF v7 + Zod v4
+
+See `references/forms.md`. Core rules:
+- **`useController`** always in RN — `register()` doesn't work on `TextInput`
+- **Zod v4**: format validators are now top-level: `z.email()`, `z.url()`, `z.uuid()` (not `z.string().email()`)
+- **`z.coerce.number()`** for numeric TextInput values (TextInput always returns strings)
+- `formState` is a Proxy — read sub-properties unconditionally, never conditionally
+
+---
+
+## 7. Images
 
 ```tsx
 import { Image } from 'expo-image';
-
-<Image
-  source={{ uri }}
-  placeholder={{ blurhash }}
-  contentFit="cover"
-  transition={200}
-  recyclingKey={item.id}   // required inside FlashList — prevents stale image on fast scroll
-/>
+<Image source={{ uri }} placeholder={{ blurhash }} contentFit="cover" transition={200} recyclingKey={item.id} />
 ```
 
 ---
 
-## 7. Library Choices
+## 8. Library Preferences
 
 | Use | Not |
 |-----|-----|
-| `expo-audio` | `expo-av` (audio) |
-| `expo-video` | `expo-av` (video) |
+| `expo-audio` | `expo-av` for audio |
+| `expo-video` | `expo-av` for video |
 | `expo-image` | `react-native` Image, FastImage |
 | `expo-image source="sf:name"` | `expo-symbols`, `@expo/vector-icons` |
 | `react-native-safe-area-context` | `SafeAreaView` from `react-native` |
-| `process.env.EXPO_OS` | `Platform.OS` (not tree-shakeable) |
+| `process.env.EXPO_OS` | `Platform.OS` |
 | `React.use(Context)` | `useContext(Context)` |
 | `useWindowDimensions()` | `Dimensions.get()` |
 | `expo-secure-store` | AsyncStorage for secrets |
 | `Pressable` | `TouchableOpacity`, `TouchableHighlight` |
-| `FlashList` | `FlatList` (on New Architecture) |
+| `StyleSheet.absoluteFill` | `StyleSheet.absoluteFillObject` (removed in RN 0.85) |
 
 ---
 
-## 8. Expo Router v4 — Code Conventions
+## 9. SDK / RN Breaking Changes by Version
+
+| Version | Key code-level changes |
+|---|---|
+| RN 0.85 | `StyleSheet.absoluteFillObject` removed; layout props animatable with native driver |
+| Expo SDK 56 | RN 0.85.2 + React 19.2.3; Expo Router forks React Navigation (codemod required) |
+| Expo SDK 55 | `expo-av` → `expo-audio` + `expo-video` |
+| Expo SDK 54 | React Compiler auto-configured; `react-native-worklets` required peer dep |
+
+---
+
+## 10. Expo Router (SDK 56)
 
 ```
 app/
@@ -192,80 +187,64 @@ app/
   (modal)/sheet.tsx    presentation: formSheet
 ```
 
-- Route files only in `app/` — never co-locate components, hooks, or types there
-- `_layout.tsx` required in every route group
-- kebab-case filenames: `user-profile.tsx`
+- **SDK 56**: import from `expo-router` directly — `@react-navigation/native` no longer available via `expo-router`'s deps
+- Route files only in `app/`; components/hooks/types in `components/`/`hooks/`/`types/`
+- kebab-case filenames; `_layout.tsx` in every route group
 
 ```tsx
-// Prefetch on Link
 <Link href="/detail" prefetch>View</Link>
 
-// NativeTabs — zero JS re-renders on tab switch
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs'; // zero JS re-renders on tab switch
 
-// Native sheet — prefer over third-party bottom sheet libs
-<Stack.Screen options={{
-  presentation: 'formSheet',
-  sheetAllowedDetents: [0.5, 1.0],
-  sheetGrabberVisible: true,
-}} />
+<Stack.Screen options={{ presentation: 'formSheet', sheetAllowedDetents: [0.5, 1.0] }} />
 ```
 
 ---
 
-## 9. Styling
+## 11. Styling
 
 ```tsx
-// New Architecture: boxShadow replaces legacy shadow* props (which are ignored)
-<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
-
-// ScrollView padding — contentContainerStyle only (avoids clipping)
+<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />  // legacy shadow* ignored
 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-
-// Safe area without a wrapper
 <ScrollView contentInsetAdjustmentBehavior="automatic" />
-
-// Apple HIG-compliant corners
 <View style={{ borderRadius: 12, borderCurve: 'continuous' }} />
-
-// Tabular numbers for counters/prices
 <Text style={{ fontVariant: ['tabular-nums'] }}>{price}</Text>
-
-// Selectable text for data users may copy
 <Text selectable>{address}</Text>
 ```
 
-For NativeWind: `references/nativewind.md`.
+For NativeWind v4: `references/nativewind.md`.
 
 ---
 
-## 10. Hard Stops
+## 12. Hard Stops
 
-| ❌ Anti-pattern | ✅ Fix |
+| ❌ | ✅ |
 |---|---|
-| `collapsable` missing on ref'd View | `<View ref={r} collapsable={false}>` |
-| `useEffect` to derive state | Compute during render |
-| `useEffect` for event side effect | Move to event handler |
-| `useState` for scroll position | `useSharedValue` |
-| Animating layout props | `transform` + `opacity` only |
-| `onSuccess` in `useQuery` (TanStack Query v5) | `useMutation.onSuccess` or `useEffect` on `data` |
-| `estimatedItemSize` on FlashList v2 | Remove — deprecated |
-| `FlatList` on New Architecture | `FlashList` v2 |
-| Inline arrow function as `renderItem` | Stable component reference |
-| `expo-av` | `expo-audio` / `expo-video` |
-| `SafeAreaView` from `react-native` | `react-native-safe-area-context` |
-| `shadow*` props / `elevation` | `boxShadow` CSS prop |
-| `Platform.OS` in conditionals | `process.env.EXPO_OS` |
-| `useMemo`/`useCallback` without profiler evidence | Remove — React Compiler handles it |
+| `StyleSheet.absoluteFillObject` | `StyleSheet.absoluteFill` |
+| `z.string().email()` (Zod v4) | `z.email()` |
+| `z.string().url()` (Zod v4) | `z.url()` |
+| `z.record(z.string())` (Zod v4) | `z.record(z.string(), z.string())` |
+| `z.nativeEnum(MyEnum)` (Zod v4) | `z.enum(MyEnum)` |
+| `invalid_type_error` / `required_error` (Zod v4) | unified `error` param |
+| Default import from `'zustand'` (v5) | Named: `import { create } from 'zustand'` |
+| `create(fn, equalityFn)` (Zustand v5) | `createWithEqualityFn` from `'zustand/traditional'` |
+| `MasonryFlashList` | `<FlashList masonry numColumns={N} />` |
+| `estimatedItemSize` on FlashList v2 | Remove — all size props deprecated |
+| Refs on `<View>` without `collapsable={false}` | `<View ref={r} collapsable={false}>` |
+| `useEffect` for derived state | Compute during render |
+| `register()` on RN TextInput | `useController` / `Controller` |
+| `watch()` at form root | `useWatch({ control, name })` |
+| `mode: 'onChange'` in RHF | `mode: 'onBlur'` |
+| `useMemo`/`useCallback` without profiler evidence | Let React Compiler handle it |
 | `{count && <Text>}` where count can be 0 | `{count > 0 && <Text>}` |
-| `forwardRef` on new components | Plain `ref` prop |
+| RSC + EAS Update in production | EAS Update is incompatible with RSC |
 
 ---
 
 ## References
 
-- `references/forms.md` — React Hook Form v7 + Zod v3: useController, formState Proxy, watch vs useWatch vs getValues, defaultValues, useFieldArray, discriminatedUnion, superRefine, coerce
-- `references/animations.md` — Reanimated 4: scheduleOnRN, CSS transitions, gestures, layout animations, 120fps
-- `references/state-and-effects.md` — TanStack Query patterns, Zustand (slices, selectors, persist, context injection), context rules
-- `references/performance.md` — FlashList tuning, Intl hoisting, WeakRef caching, memory patterns
-- `references/nativewind.md` — NativeWind v4/v5 className patterns, dark mode, CSS vars, gotchas
+- `references/forms.md` — RHF v7 + Zod v4: useController, formState Proxy, Zod v4 API changes
+- `references/animations.md` — Reanimated 4: scheduleOnRN, CSS transitions, Shared Animation Backend
+- `references/state-and-effects.md` — TanStack Query, Zustand v5 (slices, persist, selectors)
+- `references/performance.md` — FlashList v2 tuning, Hermes, bundle, memory
+- `references/nativewind.md` — NativeWind v4 patterns, dark mode, CSS vars

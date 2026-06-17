@@ -1,0 +1,20 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "React Native & Expo",
+      "description": "Production code patterns for Expo SDK 56, RN 0.85, Reanimated 4, FlashList v2, Zustand v5, Zod v4, RHF v7.",
+      "skills": [
+        "expo-react-native"
+      ]
+    },
+    {
+      "title": "Code Review",
+      "description": "AI-era PR review for React Native — catches version-specific hallucinations, New Architecture breakage, and maintainability issues.",
+      "skills": [
+        "rn-review"
+      ]
+    }
+  ]
+}

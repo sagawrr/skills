@@ -5,8 +5,6 @@ description: Reviews a React Native or Expo PR diff for code-level correctness, 
 
 # React Native PR Review
 
-Specialized code review for React Native / Expo. Run this before or instead of a generic code review when the project uses React Native.
-
 ## Reference Loading
 
 **Before starting the review**, read `package.json` and load only the relevant reference sections:
@@ -45,21 +43,6 @@ Load `references/ai-patterns.md` only if the diff shows clear AI-generated patte
 | HIGH | Silent regression, wrong API, perf degradation | ref without `collapsable={false}` |
 | MEDIUM | Maintainability, suboptimal pattern | speculative `useMemo` |
 | INFO | Better alternative exists | suggest `scheduleOnRN` over `runOnJS` |
-
-## Why This Isn't Generic Review
-
-AI tools produce a specific class of defect: code that looks correct but uses removed APIs, wrong library versions, or patterns that silently break on New Architecture. Generic review misses these because they require knowing the exact version boundary.
-
-| AI-introduced defect | Failure mode |
-|---|---|
-| `onSuccess` in `useQuery` | Removed in TanStack Query v5 — silently ignored |
-| `estimatedItemSize` on FlashList | Deprecated in v2 — no error, just ignored |
-| Ref without `collapsable={false}` | New Architecture view flattening → ref is always null |
-| `useEffect` for derived state | Extra render cycle, stale frame on state update |
-| `jsxImportSource: 'nativewind'` in Babel | Breaks NativeWind v5 — styles stop applying |
-| Speculative `useMemo`/`useCallback` | Adds noise; React Compiler handles these now |
-| Component file in `app/` directory | Expo Router treats it as a route — 404 or wrong screen |
-| `shadow*` / `elevation` props | Silently ignored on New Architecture |
 
 ## Checklist Categories (run in parallel)
 
@@ -106,5 +89,5 @@ Omit severity levels with zero findings. Skip INFO unless it's the only finding.
 ## References
 
 - `references/checklist.md` — full itemized checklist per category
-- `references/ai-patterns.md` — AI-era defect patterns with "why it happens" explanations
+- `references/ai-patterns.md` — AI-era defect patterns with ❌/✅ examples
 - Related: `expo-react-native` skill (authoritative patterns reference)

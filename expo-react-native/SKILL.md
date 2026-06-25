@@ -5,8 +5,6 @@ description: Battle-tested code patterns pinned to Expo SDK 56 (RN 0.85.2, React
 
 # Expo / React Native — Hardened Patterns
 
-> Pinned: Expo SDK 56 · RN 0.85.2 · React 19.2.3 · Reanimated 4 · FlashList v2 · NativeWind v4 · Zustand v5 · Zod v4 · RHF v7
-
 ## Reference Loading
 
 **Before reading any reference file**, read `package.json` and use this table to decide which ones to load. Load only what matches — skip the rest.
@@ -30,16 +28,15 @@ If `package.json` is unavailable, load only the references directly relevant to 
    - View flattening makes refs null — add `collapsable={false}` to every `<View ref={...}>`
 2. **`StyleSheet.absoluteFillObject` removed in RN 0.85** — use `StyleSheet.absoluteFill`
 3. **Expo Router SDK 56**: forks React Navigation — `@react-navigation/*` is no longer a peer dep of `expo-router`. Run the codemod after upgrading.
-4. **React 19 in SDK 56** — `use()`, `useTransition`, `useOptimistic`. `ref` is now a plain prop; `forwardRef` still works but not needed for new components.
-5. **React Compiler (default in SDK 54+ new projects)** — handles most memoization. Don't add `useMemo`/`useCallback` without profiler evidence of bail-out (`useMemoCache` absent in fiber tree = bailed out).
+4. **React 19 in SDK 56** — `use()`, `useTransition`, `useOptimistic`. `ref` is now a plain prop; **do not write `forwardRef` for new components**.
+5. **React Compiler (default in SDK 54+ new projects)** — **do not write `useMemo` or `useCallback`**. The compiler handles memoization. Writing them is wrong by default, not a safe default. Only exception: profiler shows the component bailing out (`useMemoCache` absent in fiber tree) AND the computation is measurably expensive (>1ms or visible jank).
 6. **Reanimated 4 (requires New Architecture)** — `scheduleOnRN` replaces `runOnJS`. See `references/animations.md`.
-7. **Profile before optimizing** — measure first, fix one thing, re-measure.
 
 ---
 
 ## 1. useEffect — 3 Legitimate Uses
 
-Valid: (1) subscribing to an external system, (2) imperative native call after mount with cleanup, (3) synchronizing two external systems. Full replacement map in `references/state-and-effects.md`.
+Full replacement map in `references/state-and-effects.md`.
 
 ```tsx
 // ❌ derives state in an effect — extra render, stale frame
@@ -113,7 +110,7 @@ import { FlashList } from '@shopify/flash-list';
   getItemType={item => item.type}   // required for heterogeneous lists
   onEndReached={fetchNextPage}
   onEndReachedThreshold={0.5}
-  // estimatedItemSize / estimatedListSize / estimatedFirstItemOffset — deprecated in v2, no longer used; delete them
+  // DO NOT add estimatedItemSize / estimatedListSize / estimatedFirstItemOffset — removed in v2, auto-handled internally
   // masonry layout (replaces standalone MasonryFlashList):
   // masonry numColumns={2}
 />
@@ -131,7 +128,7 @@ import { FlashList } from '@shopify/flash-list';
 See `references/animations.md`. Core rules:
 - `transform` + `opacity` are always safe; layout props (`width`, `height`, etc.) can also animate natively in RN 0.85+ via Shared Animation Backend
 - Scroll position → `useSharedValue`, never `useState`
-- `scheduleOnRN` preferred over `runOnJS` for calling JS from a worklet
+- Do not write `runOnJS` — use `scheduleOnRN` for calling JS from a worklet
 - CSS transitions (single): `style={{ transitionProperty: 'opacity', transitionDuration: '300ms', opacity: isVisible ? 1 : 0 }}`
 - CSS transitions (multi): `transitionProperty: ['opacity', 'transform']`, `transitionDuration: ['300ms', '200ms']` — arrays, not comma strings
 
@@ -212,7 +209,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs'; // uses native sy
 ## 11. Styling
 
 ```tsx
-<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />  // New Architecture only (RN 0.76+); don't mix with shadow* on same element
+<View style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />  // New Architecture (RN 0.76+) — do not write shadow*/elevation props, silently ignored on New Architecture
 <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
 <ScrollView contentInsetAdjustmentBehavior="automatic" />
 <View style={{ borderRadius: 12, borderCurve: 'continuous' }} />

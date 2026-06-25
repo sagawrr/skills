@@ -6,16 +6,14 @@ Defects AI tools reliably produce — code that looks correct, compiles cleanly,
 
 ## 1. Hallucinated APIs (Wrong Library Version)
 
-AI training data predates breaking changes. The model generates the old API with full confidence.
-
 | Hallucinated pattern | What's actually correct | Library |
 |---|---|---|
 | `useQuery({ onSuccess, onError })` | `useEffect` watching `data`/`error`, or global `QueryClient` callbacks | TanStack Query v5 |
 | `useQuery({ cacheTime: 5000 })` | `useQuery({ gcTime: 5000 })` | TanStack Query v5 |
-| `estimatedItemSize={72}` on FlashList | Remove — auto-handled in v2 | FlashList v2 |
-| `estimatedListSize` / `estimatedFirstItemOffset` | Remove — deprecated in v2, no longer used | FlashList v2 |
+| `estimatedItemSize={72}` on FlashList | Do not write — removed in v2, auto-handled internally | FlashList v2 |
+| `estimatedListSize` / `estimatedFirstItemOffset` | Do not write — removed in v2, auto-handled internally | FlashList v2 |
 | `import { Audio } from 'expo-av'` | `import { Audio } from 'expo-audio'` | Expo SDK 55 |
-| `forwardRef` on new function components | Plain `ref` prop (still works, not needed) | React 19 |
+| `forwardRef` on new function components | Plain `ref` prop — do not write `forwardRef` for new components | React 19 |
 | `jsxImportSource: 'nativewind'` in Babel | Remove for NativeWind v5 | NativeWind v5 |
 | `z.string().email()` / `.url()` / `.uuid()` | `z.email()` / `z.url()` / `z.uuid()` | Zod v4 |
 | `z.record(z.string())` | `z.record(z.string(), ValueSchema)` | Zod v4 |
@@ -25,8 +23,6 @@ AI training data predates breaking changes. The model generates the old API with
 | `create(fn, equalityFn)` | `createWithEqualityFn` from `'zustand/traditional'` | Zustand v5 |
 | `StyleSheet.absoluteFillObject` | `StyleSheet.absoluteFill` | RN 0.85 |
 | `import { MasonryFlashList }` | `<FlashList masonry numColumns={N} />` | FlashList v2 |
-
-**Why it happens:** The model saw thousands of examples of the old API. It generates them fluently because they look like correct code. The fix is always to check the installed major version against what the code uses.
 
 ---
 
@@ -42,8 +38,6 @@ useEffect(() => {
 // ✅ compute during render — zero lag, zero extra state
 const filtered = items.filter(isActive);
 ```
-
-**Why it happens:** Model associates "recompute when dependency changes" with `useEffect`. The React mental model is to reach for `useEffect` for any "reaction." Correct model: `useEffect` is only for synchronizing with external systems.
 
 ---
 
@@ -66,34 +60,27 @@ async function handleSubmit() {
 }
 ```
 
-**Why it happens:** Model sees "do X when Y" and reaches for `useEffect`. Correct: if Y is caused by a user action, the side effect belongs in that action's handler.
-
 ---
 
 ## 4. Speculative Memoization
 
 ```tsx
-// ❌ AI adds useMemo/useCallback "for performance" with no measurement
-const handlePress = useCallback(() => {
-  setCount(c => c + 1);
-}, []); // React Compiler would handle this
+// ❌ wrong — React Compiler (SDK 54+) handles this; adding it is noise
+const handlePress = useCallback(() => setCount(c => c + 1), []);
+const expensiveValue = useMemo(() => a + b, [a, b]);
 
-const expensiveValue = useMemo(() => a + b, [a, b]); // trivial computation
-
-// ✅ let React Compiler handle it (SDK 54+)
+// ✅
 const handlePress = () => setCount(c => c + 1);
 const expensiveValue = a + b;
 ```
 
-**Why it happens:** Trained on pre-compiler codebases where manual memoization was best practice. In 2025 codebases with React Compiler enabled, most of this is noise that adds visual complexity without benefit.
-
-**When manual memoization IS justified:** Profiler confirms a component re-renders with identical inputs AND the computation is measurably expensive (> 1ms, or causes visible jank).
+`useMemo`/`useCallback` are wrong by default when React Compiler is enabled, not a safe fallback. Only valid with a comment citing profiler bail-out evidence (`useMemoCache` absent) AND measurably expensive computation (>1ms).
 
 ---
 
 ## 5. New Architecture Blindspots
 
-Two silent breakage patterns AI tools never get right because they weren't in training data:
+Two silent breakage patterns:
 
 **Ref on flattened view:**
 ```tsx
@@ -122,7 +109,7 @@ dispatch({ type: 'FETCH_SUCCESS', data: result }); // sets loading=false, data=r
 
 ## 6. God Components
 
-AI fills a single component with fetching, transformation, business logic, and rendering. This is the #1 maintainability problem in AI-generated React Native code.
+Single component mixes fetching, transformation, business logic, and rendering.
 
 ```tsx
 // ❌ AI-generated — 250 lines, mixes concerns, impossible to test in isolation
@@ -165,8 +152,6 @@ function withLoadingState<T>(Component: React.FC<T>, isLoading: boolean) {
 
 ## 8. Type Safety Shortcuts
 
-AI takes the fastest path to "no TypeScript error" — not the correct one.
-
 ```tsx
 // ❌ silences errors without fixing them
 const data = response as UserData;
@@ -189,8 +174,6 @@ const user = UserSchema.parse(response); // throws with a readable error if wron
 
 ## 9. Expo Router File Placement
 
-AI places components in `app/` because it sees route files there and assumes it's the right folder.
-
 ```
 // ❌ AI-generated — UserCard becomes a route at /UserCard
 app/
@@ -211,8 +194,6 @@ hooks/
 ---
 
 ## 10. What-Comments (Noise)
-
-AI generates comments that restate what the code already says. They rot as code changes.
 
 ```tsx
 // ❌ restates the code — adds noise, becomes wrong after refactor
@@ -266,8 +247,6 @@ function EmailInput({ control }: { control: Control<LoginForm> }) {
   );
 }
 ```
-
-**Why it happens:** AI training data is dominated by web React examples. `register()` works via ref-spreading on web inputs; React Native TextInput works differently.
 
 ---
 

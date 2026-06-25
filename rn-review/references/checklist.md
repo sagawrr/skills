@@ -2,8 +2,6 @@
 
 > Pinned: Expo SDK 56 · RN 0.85 · Zustand v5 · Zod v4 · RHF v7 · FlashList v2
 
-For each category: scan the diff, cite `file:line`, assign severity.
-
 ---
 
 ## 1. New Architecture
@@ -29,7 +27,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 - Starting a new animation while another is mid-flight from a different code path — use `cancelAnimation(sv)` to explicitly stop it first; Reanimated auto-cancels on same-source reassignment, but cross-source conflicts need explicit cancellation
 
 **MEDIUM:**
-- `runOnJS` used in new code — still works but `scheduleOnRN` is the preferred modern form
+- `runOnJS` in new code — do not write; use `scheduleOnRN` instead
 - Worklet closure captures an object reference — should capture only primitives to avoid UI thread memory waste
 
 ---
@@ -39,7 +37,7 @@ For each category: scan the diff, cite `file:line`, assign severity.
 **BLOCKER (confirmed API removals — AI commonly generates these for wrong versions):**
 - `useQuery({ onSuccess, onError, onSettled })` — removed from `useQuery` in TanStack Query v5; replace with `useEffect` watching `data`/`error`, or global `QueryClient` callbacks for app-wide notifications (`useMutation.onSuccess` is for mutations only, not a query replacement)
 - `useQuery({ cacheTime })` — renamed to `gcTime` in TanStack Query v5
-- `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — deprecated in v2, no longer used; delete them
+- `estimatedItemSize` / `estimatedListSize` / `estimatedFirstItemOffset` on FlashList — **do not write these**; removed in v2, FlashList auto-handles sizing
 - `MasonryFlashList` import — removed; use `<FlashList masonry numColumns={N} />`
 - `import { Audio } from 'expo-av'` / `import { Video } from 'expo-av'` — split into `expo-audio` + `expo-video` in SDK 55
 - `StyleSheet.absoluteFillObject` — removed in RN 0.85; use `StyleSheet.absoluteFill`
@@ -153,7 +151,7 @@ Every `useEffect` in the diff needs a justification. Fail if:
 - Component contains both data-fetching logic and detailed render JSX — separate into a data hook + pure component
 
 **MEDIUM:**
-- `useMemo` or `useCallback` added with no profiler evidence or explanation comment — React Compiler handles these; remove unless justified
+- `useMemo` or `useCallback` present — React Compiler handles this; **always flag for removal** unless there is a comment citing profiler evidence of bail-out (`useMemoCache` absent) AND a measurably expensive computation (>1ms)
 - `useState` holding a value that could be derived from another state or prop — compute during render
 - Abstraction (HOC, util function) that is used exactly once — inline it; single-use abstractions add indirection with no benefit
 - Comment explains *what* the code does (restates the code) — remove; only explain *why* when non-obvious

@@ -20,7 +20,7 @@
 
 - `recyclingKey` on every `expo-image` inside items — prevents stale image on fast scroll
 - Item components must be stable references — never inline arrow functions in `renderItem`
-- `estimatedItemSize` — deprecated in v2, no longer used; delete it
+- **Do not write `estimatedItemSize`** — removed in v2, FlashList auto-handles sizing
 
 ---
 

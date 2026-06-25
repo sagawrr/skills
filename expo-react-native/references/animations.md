@@ -72,10 +72,9 @@ import { scheduleOnRN } from 'react-native-worklets';
 const handler = useAnimatedScrollHandler({
   onScroll: (e) => {
     scrollY.value = e.contentOffset.y;
-    // preferred: scheduleOnRN
     // scheduleOnRN(fn, ...args) — single call, unlike runOnJS(fn)(args) double-invocation
     if (e.contentOffset.y > 100) scheduleOnRN(onHeaderVisible);
-    // still valid (deprecated): runOnJS(onHeaderVisible)()
+    // do not write runOnJS in new code — use scheduleOnRN
   },
 });
 ```

@@ -5,18 +5,13 @@ description: Draft, rewrite, audit, and systematize product error messages so th
 
 # Write Better Error Messages
 
-## Overview
-
-Use error messages as product recovery tools. Based on Wix UX's "When life gives you lemons, write better error messages": good errors explain what happened, why if known, what is safe, what to do next, and where to go if the user cannot recover. Treat error handling as shared product, engineering, design, data, support, and UX writing work.
-
 ## Operating Loop
 
 1. Gather only the context needed to write truthfully.
 2. Classify the current issue: generic, unclear, blameful, jargon-heavy, dead-end, or wrong tone.
 3. Decide whether copy can fix it or whether product/engineering must map causes, impact, recovery, or instrumentation. If the error condition can be eliminated upstream — do that first, before improving the copy.
 4. Rewrite with the helpful-error structure.
-5. Flag for testing with a real user or stakeholder when the message is high-stakes, novel, or replacing entrenched copy.
-6. Return improved copy plus follow-ups for anything copy cannot responsibly solve.
+5. Return improved copy plus follow-ups for anything copy cannot responsibly solve.
 
 ## Context Needed
 
@@ -83,13 +78,12 @@ Avoid third-party blame such as "[service] isn't responding." Prefer "We're havi
 
 ## Tone Rules
 
-- Be calm, direct, and respectful.
 - Match severity. Avoid playful language for payments, publishing, data loss, account access, health, legal, or income-impacting workflows.
 - Do not over-apologize. One apology can fit severe or unrecoverable situations, but clarity matters more.
 - Use "please" sparingly for high-friction asks, support handoffs, or cases the product cannot resolve for the user.
 - Focus on the problem and recovery, not on the user's mistake.
 - Prefer active, concrete verbs: "Check", "Reconnect", "Try again", "Contact support".
-- Use short sentences, plain words. Write so a non-technical user can act on the message without re-reading.
+- Use short sentences, plain words.
 - Write for localization: avoid idioms, keep variable substitution at end of strings where possible.
 
 ## Audit Output
@@ -114,34 +108,7 @@ Follow-up: ...
 
 When auditing many errors, rank first by flow-blocking severity, frequency, trust impact, known cause hidden behind generic copy, and cross-functional effort needed. Trust-impacting errors include money, publishing, orders, user data, access, compliance, or safety.
 
-Recommend a one-month post-launch review for new products or flows that currently rely on generic fallback messages.
-
-## Ask When Needed
-
-Use these when copy cannot be responsibly written from available context:
-
-- What exact condition triggers this message?
-- Is the user's work saved, partially saved, queued, or discarded?
-- Can the user fix this themselves?
-- Is retrying useful, and after how long?
-- Is this a user-side, system-side, permission, validation, or integration issue?
-- Can we split this generic error into more specific cases?
-- How often does this happen, and where in the flow?
-- What support path should users use if it persists?
-
 ## Placement
 
 Error messages should appear near the element that triggered them — inline below a field, not only at the top of a form or in a distant toast. Placement is as important as wording: a correct message in the wrong place is still a usability failure. Flag placement issues in the Follow-up column when copy alone cannot fix them.
 
-## Final Check
-
-Before finalizing, confirm:
-
-- The message answers "what happened?"
-- It answers "why?" when known.
-- It avoids jargon, blame, cute tone, and raw error codes.
-- It gives a realistic next step.
-- It reassures users where possible.
-- It includes a way out for unrecoverable or recurring failures.
-- It identifies product, data, or engineering work when copy alone is not enough.
-- It appears near the triggering element (or flags placement as a follow-up).

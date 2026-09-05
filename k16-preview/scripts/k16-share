@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# k16-share — expose a local port via a free ephemeral TryCloudflare quick tunnel.
+# Managed lifecycle: idempotent start, state file, verified URL, teardown via k16-share-stop.
+# Exit codes: 0 ok, 1 failure (message explains), 2 bad usage.
+set -u
+STATE_DIR="$HOME/.local/share/k16-share"
+STATE="$STATE_DIR/state.env"
+LOG="$STATE_DIR/tunnel.log"
+POLL_INTERVAL=2   # seconds between URL polls; quick tunnels register in ~5-15s
+POLL_TRIES=10     # 10 x 2s = 20s max wait for the URL to appear
+VERIFY_TRIES=6    # HTTP checks after URL appears: the random subdomain's DNS
+                  # record takes up to ~60s to propagate, so verify patiently
+VERIFY_INTERVAL=10
+
+usage() { echo "usage: k16-share <local-port>" >&2; exit 2; }
+[ $# -eq 1 ] || usage
+case "$1" in ''|*[!0-9]*) usage;; esac
+PORT="$1"
+mkdir -p "$STATE_DIR"
+
+# Idempotent: if a managed tunnel is already alive, return its URL instead of
+# starting a duplicate (duplicate tunnels = stray processes = leaks).
+if [ -f "$STATE" ]; then
+  # shellcheck disable=SC1090
+  . "$STATE"
+  if kill -0 "${pid:-0}" 2>/dev/null; then
+    echo "URL: ${url:-unknown}"
+    echo "status: already sharing port ${port:-?} (pid $pid) — nothing new started"
+    exit 0
+  fi
+  rm -f "$STATE" "$LOG"   # stale state from a dead process — recover cleanly
+fi
+
+if ! ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ":$PORT\$"; then
+  echo "warning: nothing is listening on port $PORT yet; starting the tunnel anyway" >&2
+fi
+
+setsid cloudflared tunnel --url "http://127.0.0.1:$PORT" \
+  --http-host-header "localhost:$PORT" --no-autoupdate > "$LOG" 2>&1 &
+pid=$!
+
+url=""
+for _ in $(seq 1 "$POLL_TRIES"); do
+  url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | head -1)
+  [ -n "$url" ] && break
+  kill -0 "$pid" 2>/dev/null || break
+  sleep "$POLL_INTERVAL"
+done
+
+if [ -z "$url" ]; then
+  echo "error: no tunnel URL within $((POLL_TRIES * POLL_INTERVAL))s (pid $pid)" >&2
+  tail -3 "$LOG" >&2
+  kill "$pid" 2>/dev/null
+  rm -f "$STATE"
+  exit 1
+fi
+
+printf 'port=%s\npid=%s\nurl=%s\n' "$PORT" "$pid" "$url" > "$STATE"
+
+status="(unverified)"
+code=""
+for _ in $(seq 1 "$VERIFY_TRIES"); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/") || code=000
+  if [ "$code" = "200" ]; then status="verified HTTP 200"; break; fi
+  if [ "$code" = "000" ]; then
+    # The local resolver often can't answer a minutes-old wildcard subdomain
+    # (propagation lag and/or router DNS quirks). Fall back to resolving via a
+    # public resolver and pinning the IP — the tunnel edge is the same anycast.
+    host=$(printf '%s' "$url" | sed -E 's#https://([^/]+).*#\1#')
+    ip=$(dig +short +time=2 +tries=1 @1.1.1.1 "$host" 2>/dev/null | grep -E '^[0-9.]+$' | head -1)
+    if [ -n "$ip" ]; then
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$host:443:$ip" "$url/") || code=000
+      if [ "$code" = "200" ]; then status="verified HTTP 200"; break; fi
+    fi
+    status="waiting for DNS propagation of the share URL"
+  else
+    status="tunnel up, origin returned HTTP $code"
+  fi
+  sleep "$VERIFY_INTERVAL"
+done
+
+echo "URL: $url"
+echo "status: $status"
+case "$code" in
+  403) echo "hint: the app rejected the Host header (Vite allowedHosts?); the tunnel itself is fine" ;;
+  502) echo "hint: nothing answered on 127.0.0.1:$PORT — start the dev server first" ;;
+esac
+exit 0

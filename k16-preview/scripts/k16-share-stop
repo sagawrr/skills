@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# k16-share-stop — stop managed k16-share tunnel(s) and verify nothing is left public.
+# Exit codes: 0 ok, 1 could not fully clean up.
+set -u
+STATE_DIR="$HOME/.local/share/k16-share"
+STATE="$STATE_DIR/state.env"
+stopped=0
+
+if [ -f "$STATE" ]; then
+  # shellcheck disable=SC1090
+  . "$STATE"
+  if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null && stopped=1
+    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$STATE" "$STATE_DIR/tunnel.log"
+fi
+
+# Sweep unmanaged quick tunnels too (old-style shares). This pattern NEVER
+# matches the system named tunnel, which runs as
+#   cloudflared --config /etc/cloudflared/config.yml tunnel run
+pids=$(pgrep -f '[c]loudflared tunnel --url' || true)
+if [ -n "$pids" ]; then
+  kill $pids 2>/dev/null && stopped=1
+  sleep 1
+  kill -9 $pids 2>/dev/null || true
+fi
+
+if pgrep -f '[c]loudflared tunnel --url' >/dev/null 2>&1; then
+  echo "error: a quick tunnel is still running:"
+  pgrep -af '[c]loudflared tunnel --url'
+  exit 1
+fi
+
+if [ "$stopped" = 1 ]; then
+  echo "stopped: share tunnel removed, nothing public left"
+else
+  echo "nothing was being shared"
+fi
+exit 0

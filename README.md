@@ -29,12 +29,6 @@ npx skills add sagawrr/skills --skill expo-react-native
 | [`expo-react-native`](expo-react-native/SKILL.md) | Hardened code patterns for Expo and React Native — state, animations, lists, forms, and styling. Covers useEffect replacements, Zustand, TanStack Query, Reanimated, FlashList, NativeWind, React Hook Form + Zod, and New Architecture gotchas. |
 | [`rn-review`](rn-review/SKILL.md) | PR review skill for React Native — scans diffs for broken APIs, New Architecture breakage, AI-generated anti-patterns, and maintainability issues. Run with `/rn-review` before merging. |
 
-### Remote Dev Previews
-
-| Skill | Purpose |
-| --- | --- |
-| [`k16-preview`](k16-preview/SKILL.md) | Run, browse, or share dev-server previews on a headless Linux box (via herdr) — LAN URL, off-LAN ssh tunnel, or an ephemeral public link via Cloudflare quick tunnels. Idempotent managed start, DNS-fallback verification, and clean teardown so nothing stays exposed. |
-
 ### Writing & Communication
 
 | Skill | Purpose |

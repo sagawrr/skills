@@ -15,13 +15,6 @@
       "skills": [
         "rn-review"
       ]
-    },
-    {
-      "title": "Remote Dev Previews",
-      "description": "Run, browse, and share dev-server previews from a headless Linux box — LAN URLs, ssh tunnels, and ephemeral public links with verified, leak-free teardown.",
-      "skills": [
-        "k16-preview"
-      ]
     }
   ]
 }

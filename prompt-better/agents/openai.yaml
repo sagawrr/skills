@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prompt Better"
+  short_description: "Keep follow-up prompts on-track and teach what actually works"
+  default_prompt: "Use $prompt-better as I continue this task. Classify each follow-up, stay on the original job, and tell me what is performing."

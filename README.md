@@ -34,3 +34,9 @@ npx skills add sagawrr/skills --skill expo-react-native
 | Skill | Purpose |
 | --- | --- |
 | [`write-better-error-messages`](write-better-error-messages/SKILL.md) | Write and review useful product error messages that explain what happened, provide a recovery path, and avoid blame or jargon. |
+
+### Prompting
+
+| Skill | Purpose |
+| --- | --- |
+| [`prompt-better`](prompt-better/SKILL.md) | Facilitate multi-turn work after an initial prompt plus skill. Classifies follow-ups and heals a lived playbook from repeated behavior. |

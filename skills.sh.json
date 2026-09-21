@@ -15,6 +15,13 @@
       "skills": [
         "rn-review"
       ]
+    },
+    {
+      "title": "Prompting",
+      "description": "Keep multi-turn agent work on-track and heal a lived playbook from repeated behavior.",
+      "skills": [
+        "prompt-better"
+      ]
     }
   ]
 }
